@@ -16,6 +16,8 @@
 // relating to use of the SAFE Network Software.
 
 //! # Service Discovery
+//!
+//! Discover other instances of your application on the local network.
 
 #![doc(html_logo_url =
            "https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png",

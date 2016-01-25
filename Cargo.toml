@@ -1,6 +1,6 @@
 [package]
 authors = ["MaidSafe Developers <dev@maidsafe.net>"]
-description = ""
+description = "Discover other instances of your application on the local network."
 documentation = "http://maidsafe.net/service_discovery/latest"
 homepage = "http://maidsafe.net"
 license = "GPL-3.0"
