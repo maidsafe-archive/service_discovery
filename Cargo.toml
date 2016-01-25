@@ -1,0 +1,12 @@
+[package]
+authors = ["MaidSafe Developers <dev@maidsafe.net>"]
+description = ""
+documentation = "http://maidsafe.net/service_discovery/latest"
+homepage = "http://maidsafe.net"
+license = "GPL-3.0"
+name = "service_discovery"
+readme = "README.md"
+repository = "https://github.com/maidsafe/service_discovery"
+version = "0.0.1"
+
+[dependencies]
