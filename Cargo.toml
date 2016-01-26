@@ -10,3 +10,8 @@ repository = "https://github.com/maidsafe/service_discovery"
 version = "0.0.1"
 
 [dependencies]
+ip = "1.1.0"
+maidsafe_utilities = "0.1.5"
+net2 = "0.2.21"
+rand = "0.3.13"
+rustc-serialize = "0.3.16"
