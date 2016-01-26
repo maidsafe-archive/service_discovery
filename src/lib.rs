@@ -38,251 +38,355 @@
 #![allow(box_pointers, fat_ptr_transmutes, missing_copy_implementations,
          missing_debug_implementations)]
 
-#[macro_use]
-extern crate maidsafe_utilities;
+// #[macro_use]
+// extern crate maidsafe_utilities;
 
-extern crate rand;
-extern crate ip;
-extern crate net2;
+// extern crate rand;
+// extern crate ip;
+// extern crate net2;
+// extern crate rustc_serialize;
+//
+// use rand::random;
+// use rustc_serialize::Encodable;
+// use std::error::Error;
+// use std::io;
+// use std::net::{SocketAddr, UdpSocket};
+// use std::net;
+// use std::str::FromStr;
+// use std::sync::{Arc, mpsc, Mutex};
+// use std::sync::atomic::AtomicBool;
+// use std::thread;
+// use std::time::Duration;
+// use ip::SocketAddrExt;
+// use net2::UdpSocketExt;
+// use maidsafe_utilities::thread::RaiiThreadJoiner;
+// use maidsafe_utilities::serialisation::serialise;
+
+// --------------------------------------------------------------------------------
+
+extern crate mio;
+extern crate bytes;
 extern crate rustc_serialize;
 
-use rand::random;
-use rustc_serialize::Encodable;
-use std::error::Error;
 use std::io;
-use std::net::{SocketAddr, UdpSocket};
-use std::net;
-use std::str::FromStr;
-use std::sync::{Arc, mpsc, Mutex};
-use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time::Duration;
-use ip::SocketAddrExt;
-use net2::UdpSocketExt;
-use maidsafe_utilities::thread::RaiiThreadJoiner;
-use maidsafe_utilities::serialisation::serialise;
 
+use mio::udp::UdpSocket;
+use mio::{EventLoop, EventSet, Token, Handler, PollOpt};
 
+use bytes::RingBuf;
 
-pub struct ServiceDiscovery<Reply> {
-    udp_socket: UdpSocket,
-    stop_flag: Arc<AtomicBool>,
-    _raii_joiner: RaiiThreadJoiner,
-    reply: Reply
+use rustc_serialize::{Encodable, Decodable};
+
+const DISCOVERY: Token<usize> = Token(0);
+
+struct ServiceDiscovery<Reply> {
+    socket: UdpSocket,
+    read_buf: RingBuf,
+    serialised_reply: Vec<u8>,
+    observers: Vec<mpsc::Sender<Reply>>,
 }
 
-impl<Reply: Encodable> ServiceDiscovery<Reply> {
-    pub fn new(port: u16, reply: Reply) -> Result<ServiceDiscovery> {
-        let serialised_reply = try!(serialise(&reply));
-        let udp_socket = try!(UdpSocket::bind(format!("0.0.0.0:{}", port)));
-        let cloned_udp_socket = try!(udp_socket.try_clone());
+#[derive(RustcEncodable, RustcDecodable)]
+enum DiscoveryMsg<Reply: Encodable + Decodable> {
+    Request,
+    Response {
+        guid: u64,
+        content: Reply,
+    },
+}
 
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let cloned_stop_flag = stop_flag.clone();
+impl<Reply: Encodable + Decodable> Handler for ServiceDiscovery<Reply> {
+    type Timeout = ();
+    type Message = ();
 
-        let joiner = RaiiThreadJoiner::new(thread!("ServiceDiscoveryThread", move || {
-          ServiceDiscovery::start_accept(cloned_udp_socket, cloned_stop_flag, serialised_reply);
-        }));
-
-        Ok(ServiceDiscovery {
-            udp_socket: udp_socket,
-            stop_flag: stop_flag,
-            _raii_joiner: joiner,
-            reply: reply
-        })
-    }
-
-    pub fn seek_peers() -> Result<Vec<Reply>> {
-        let stuff_to_send = StuffToSend;
-        let mut result = Vec::with_capacity(10);
-
-        for attempt in 0..num_attempts {
-            self.udp_socket.send_to(self.reply, format!("255.255.255.255:{}", self.port));
+    fn ready(&mut self, event_loop: &mut EventLoop<Self>, token: Token, events: EventSet) {
+        if events.is_readable() {
+            match token {
+                DISCOVERY => {}
+                _ => (),
+            }
         }
 
-    let udp_response_thread = RaiiThreadJoiner::new(thread!("Accept Serice Discovery replies", move || {
-                                       loop {
-                                           let mut buffer = [0u8; 8];
-                                           let (size, source) = try!(socket.recv_from(&mut buffer));
-                                           match size {
-                                               // FIXME Use better ways
-                                               2usize => {
-                                                   // The response is a serialised port
-                                                   let _ = tx.send({
-                                                       let port = parse_port(&buffer);
-                                                       match source {
-                                                            net::SocketAddr::V4(a) => {
-                                                                SocketAddr(net::SocketAddr::V4(net::SocketAddrV4::new(*a.ip(), port)))
-                                                            }
-                                                            // FIXME(dirvine) Hanlde ip6 :10/01/2016
-                                                            _ => unimplemented!(),
-                                                            //                                SocketAddr::V6(a) => {
-                                                            //     SocketAddr::V6(SocketAddrV6::new(*a.ip(), port,
-                                                            //                                      a.flowinfo(),
-                                                            //                                      a.scope_id()))
-                                                            // }
-                                                       }
-                                                   });
-                                               }
-                                               8usize => {
-                                                   // The response is a shutdown signal
-                                                   if parse_shutdown_value(&buffer) ==
-                                                      shutdown_value &&
-                                                      util::is_loopback(&SocketAddrExt::ip(&source)) {
-                                                       break;
-                                                   } else {
-                                                       continue;
-                                                   }
-                                               }
-                                               _ => {
-                                                   // The response is invalid
-                                                   continue;
-                                               }
-                                           };
-                                       }
-                                       Ok(())
-                                   }));
-        wait_for_results;
-        return;
-    }
-
-    pub fn stop(&self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
-    }
-
-    fn start_accept(udp_socket: UdpSocket, stop_flag: Arc<AtomicBool>, reply: Vec<u8>) {
-        try!(udp_socket.set_read_timeout(Some(Duration::from_secs(UDP_RX_TIMEOUT_SECS))));
-
-        let mut buf = [0u8; 1024];
-
-        loop {
-            let (bytes_read, peer_ep) = try!(udp_socket.recv_from(&mut buf));
-
-            if stop_flag.load(Ordering::SeqCst) {
-                return;
+        if events.is_writable() {
+            match token {
+                DISCOVERY => {}
+                _ => (),
             }
+        }
+    }
 
-            if bytes_read > 0 {
-                let mut total_bytes_written = 0;
-                while total_bytes_written <= reply.len() {
-                    total_bytes_written += try!(udp_socket.send_to(&reply[total_bytes_written..],
-                                                                   peer_addr));
+    fn notify(&mut self, event_loop: &mut EventLoop<Self>, msg: Self::Message) {
+        unimplemented!()
+    }
+}
+
+impl<Reply: Encodable + Decodable> ServiceDiscovery<Reply> {
+    type DiscoveryMsg = DiscoveryMsg<Reply>;
+
+    pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
+        let udp_socket = UdpSocket::bound(format!("0.0.0.0:{}", port));
+        Ok(ServiceDiscovery { socket: udp_socket })
+    }
+
+    fn readable(&mut self, event_loop: &mut EventLoop<Self>) -> io::Result<()> {
+        if let Some(bytes_read, peer_addr) = try!(self.socket.recv_from(unsafe {
+            self.read_buf.mut_bytes()
+        })) {
+            let msg: DiscoveryMsg = deserialise(self.read_buf.bytes()) {
+                Ok(msg) => msg,
+                Err(_) => return Ok(()),
+            };
+
+            match msg {
+                DiscoveryMsg::Request => {
+                    try!(event_loop.reregister(&self,
+                                               DISCOVERY,
+                                               EventSet::writable(),
+                                               PollOpt::edge() | PollOpt::oneshot()));
+                }
+                DiscoveryMsg::Response { guid, content } => {
+                    if guid != self.guid {
+                        self.observers.retain(|observer| observer.send(content.clone()).is_ok());
+                    }
+                    try!(event_loop.reregister(&self,
+                                               DISCOVERY,
+                                               EventSet::readable(),
+                                               PollOpt::edge() | PollOpt::oneshot()));
                 }
             }
         }
+
+        Ok(self.read_buf.clear())
+    }
+
+    fn writable(&mut self, event_loop: &mut EventLoop<Self>) -> io::Result<()> {
+        
     }
 }
 
-impl Drop for BroadcastAcceptor {
-    fn stop(&mut self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use std::thread;
-    use std::net;
-    use std::str::FromStr;
-    use endpoint::{Protocol, Endpoint};
-    use transport;
-    use transport::{Message, Handshake};
-    use socket_addr::SocketAddr;
-
-    #[test]
-    fn test_beacon() {
-        let acceptor = unwrap_result!(BroadcastAcceptor::new(0));
-        let acceptor_port = acceptor.beacon_port();
-
-        let t1 = thread::Builder::new().name("test_beacon sender".to_owned()).spawn(move || {
-            let mut transport = acceptor.accept().unwrap().1;
-            unwrap_result!(transport.sender
-                                    .send(&Message::UserBlob("hello beacon"
-                                                                 .to_owned()
-                                                                 .into_bytes())));
-        });
-
-        let t2 = thread::Builder::new().name("test_beacon receiver".to_owned()).spawn(move || {
-            let endpoint = unwrap_result!(seek_peers(acceptor_port, None))[0];
-            let transport =
-                unwrap_result!(transport::connect(Endpoint::from_socket_addr(Protocol::Tcp,
-                                                                             endpoint)));
-            let dummy_handshake = Handshake {
-                mapper_port: None,
-                external_addr: None,
-                remote_addr: SocketAddr(net::SocketAddr::from_str("0.0.0.0:0").unwrap()),
-            };
-            let (_, mut transport) =
-                unwrap_result!(transport::exchange_handshakes(dummy_handshake, transport));
-
-            let msg = unwrap_result!(transport.receiver.receive());
-            let msg = unwrap_result!(String::from_utf8(match msg {
-                Message::UserBlob(msg) => msg,
-                _ => panic!("Wrong message type"),
-            }));
-            assert_eq!(msg, "hello beacon");
-        });
-
-        let t1 = unwrap_result!(t1);
-        let t2 = unwrap_result!(t2);
-        unwrap_result!(t1.join());
-        unwrap_result!(t2.join());
-    }
-
-    #[test]
-    fn test_avoid_beacon() {
-        let acceptor = unwrap_result!(BroadcastAcceptor::new(0));
-        let acceptor_port = acceptor.beacon_port();
-        let my_guid = acceptor.guid.clone();
-
-        let t1 = thread::Builder::new()
-                     .name("test_avoid_beacon acceptor".to_owned())
-                     .spawn(move || {
-                         let _ = unwrap_result!(acceptor.accept());
-                     });
-
-        let t2 = thread::Builder::new()
-                     .name("test_avoid_beacon seek_peers 1".to_owned())
-                     .spawn(move || {
-                         assert!(unwrap_result!(seek_peers(acceptor_port, Some(my_guid)))
-                                     .is_empty());
-                     });
-
-        // This one is just so that the first thread breaks.
-        let t3 = thread::Builder::new()
-                     .name("test_avoid_beacon seek_peers 2".to_owned())
-                     .spawn(move || {
-                         thread::sleep(::std::time::Duration::from_millis(700));
-                         let endpoint = unwrap_result!(seek_peers(acceptor_port, None))[0];
-                         let transport = unwrap_result!(transport::connect(Endpoint::from_socket_addr(Protocol::Tcp, endpoint)));
-                         let dummy_handshake = Handshake {
-                             mapper_port: None,
-                             external_addr: None,
-                             remote_addr: SocketAddr(net::SocketAddr::from_str("0.0.0.0:0").unwrap()),
-                         };
-                         let _ = unwrap_result!(transport::exchange_handshakes(dummy_handshake, transport));
-                     });
-
-        let t1 = unwrap_result!(t1);
-        let t2 = unwrap_result!(t2);
-        let t3 = unwrap_result!(t3);
-        unwrap_result!(t1.join());
-        unwrap_result!(t2.join());
-        unwrap_result!(t3.join());
-    }
-}
+// --------------------------------------------------------------------------------
+//
+// pub struct ServiceDiscovery<Reply> {
+// udp_socket: UdpSocket,
+// stop_flag: Arc<AtomicBool>,
+// _raii_joiner: RaiiThreadJoiner,
+// reply: Reply,
+// }
+//
+// impl<Reply: Encodable> ServiceDiscovery<Reply> {
+// pub fn new(port: u16, reply: Reply) -> Result<ServiceDiscovery> {
+// let serialised_reply = try!(serialise(&reply));
+// let udp_socket = try!(UdpSocket::bind(format!("0.0.0.0:{}", port)));
+// let cloned_udp_socket = try!(udp_socket.try_clone());
+//
+// let stop_flag = Arc::new(AtomicBool::new(false));
+// let cloned_stop_flag = stop_flag.clone();
+//
+// let joiner = RaiiThreadJoiner::new(thread!("ServiceDiscoveryThread", move || {
+// ServiceDiscovery::start_accept(cloned_udp_socket, cloned_stop_flag, serialised_reply);
+// }));
+//
+// Ok(ServiceDiscovery {
+// udp_socket: udp_socket,
+// stop_flag: stop_flag,
+// _raii_joiner: joiner,
+// reply: reply,
+// })
+// }
+//
+// pub fn seek_peers() -> Result<Vec<Reply>> {
+// let stuff_to_send = StuffToSend;
+// let mut result = Vec::with_capacity(10);
+//
+// for attempt in 0..num_attempts {
+// self.udp_socket.send_to(self.reply, format!("255.255.255.255:{}", self.port));
+// }
+//
+// let udp_response_thread = RaiiThreadJoiner::new(thread!("Accept Serice Discovery replies",
+// move || {
+// loop {
+// let mut buffer = [0u8; 8];
+// let (size, source) = try!(socket.recv_from(&mut buffer));
+// match size {
+// FIXME Use better ways
+// 2usize => {
+// The response is a serialised port
+// let _ = tx.send({
+// let port = parse_port(&buffer);
+// match source {
+// net::SocketAddr::V4(a) => {
+// SocketAddr(net::SocketAddr::V4(net::SocketAddrV4::new(*a.ip(), port)))
+// }
+// FIXME(dirvine) Hanlde ip6 :10/01/2016
+// _ => unimplemented!(),
+//                                SocketAddr::V6(a) => {
+//     SocketAddr::V6(SocketAddrV6::new(*a.ip(), port,
+//                                      a.flowinfo(),
+//                                      a.scope_id()))
+// }
+// }
+// });
+// }
+// 8usize => {
+// The response is a shutdown signal
+// if parse_shutdown_value(&buffer) ==
+// shutdown_value &&
+// util::is_loopback(&SocketAddrExt::ip(&source)) {
+// break;
+// } else {
+// continue;
+// }
+// }
+// _ => {
+// The response is invalid
+// continue;
+// }
+// };
+// }
+// Ok(())
+// }));
+// wait_for_results;
+// return;
+// }
+//
+// pub fn stop(&self) {
+// self.stop_flag.store(true, Ordering::SeqCst);
+// }
+//
+// fn start_accept(udp_socket: UdpSocket, stop_flag: Arc<AtomicBool>, reply: Vec<u8>) {
+// try!(udp_socket.set_read_timeout(Some(Duration::from_secs(UDP_RX_TIMEOUT_SECS))));
+//
+// let mut buf = [0u8; 1024];
+//
+// loop {
+// let (bytes_read, peer_ep) = try!(udp_socket.recv_from(&mut buf));
+//
+// if stop_flag.load(Ordering::SeqCst) {
+// return;
+// }
+//
+// if bytes_read > 0 {
+// let mut total_bytes_written = 0;
+// while total_bytes_written <= reply.len() {
+// total_bytes_written += try!(udp_socket.send_to(&reply[total_bytes_written..],
+// peer_addr));
+// }
+// }
+// }
+// }
+// }
+//
+// impl Drop for BroadcastAcceptor {
+// fn stop(&mut self) {
+// self.stop_flag.store(true, Ordering::SeqCst);
+// }
+// }
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+// #[cfg(test)]
+// mod test {
+// use super::*;
+// use std::thread;
+// use std::net;
+// use std::str::FromStr;
+// use endpoint::{Protocol, Endpoint};
+// use transport;
+// use transport::{Message, Handshake};
+// use socket_addr::SocketAddr;
+//
+// #[test]
+// fn test_beacon() {
+// let acceptor = unwrap_result!(BroadcastAcceptor::new(0));
+// let acceptor_port = acceptor.beacon_port();
+//
+// let t1 = thread::Builder::new().name("test_beacon sender".to_owned()).spawn(move || {
+// let mut transport = acceptor.accept().unwrap().1;
+// unwrap_result!(transport.sender
+// .send(&Message::UserBlob("hello beacon"
+// .to_owned()
+// .into_bytes())));
+// });
+//
+// let t2 = thread::Builder::new().name("test_beacon receiver".to_owned()).spawn(move || {
+// let endpoint = unwrap_result!(seek_peers(acceptor_port, None))[0];
+// let transport =
+// unwrap_result!(transport::connect(Endpoint::from_socket_addr(Protocol::Tcp,
+// endpoint)));
+// let dummy_handshake = Handshake {
+// mapper_port: None,
+// external_addr: None,
+// remote_addr: SocketAddr(net::SocketAddr::from_str("0.0.0.0:0").unwrap()),
+// };
+// let (_, mut transport) =
+// unwrap_result!(transport::exchange_handshakes(dummy_handshake, transport));
+//
+// let msg = unwrap_result!(transport.receiver.receive());
+// let msg = unwrap_result!(String::from_utf8(match msg {
+// Message::UserBlob(msg) => msg,
+// _ => panic!("Wrong message type"),
+// }));
+// assert_eq!(msg, "hello beacon");
+// });
+//
+// let t1 = unwrap_result!(t1);
+// let t2 = unwrap_result!(t2);
+// unwrap_result!(t1.join());
+// unwrap_result!(t2.join());
+// }
+//
+// #[test]
+// fn test_avoid_beacon() {
+// let acceptor = unwrap_result!(BroadcastAcceptor::new(0));
+// let acceptor_port = acceptor.beacon_port();
+// let my_guid = acceptor.guid.clone();
+//
+// let t1 = thread::Builder::new()
+// .name("test_avoid_beacon acceptor".to_owned())
+// .spawn(move || {
+// let _ = unwrap_result!(acceptor.accept());
+// });
+//
+// let t2 = thread::Builder::new()
+// .name("test_avoid_beacon seek_peers 1".to_owned())
+// .spawn(move || {
+// assert!(unwrap_result!(seek_peers(acceptor_port, Some(my_guid)))
+// .is_empty());
+// });
+//
+// This one is just so that the first thread breaks.
+// let t3 = thread::Builder::new()
+// .name("test_avoid_beacon seek_peers 2".to_owned())
+// .spawn(move || {
+// thread::sleep(::std::time::Duration::from_millis(700));
+// let endpoint = unwrap_result!(seek_peers(acceptor_port, None))[0];
+// let transport = unwrap_result!(transport::connect(Endpoint::from_socket_addr(Protocol::Tcp, endpoint)));
+// let dummy_handshake = Handshake {
+// mapper_port: None,
+// external_addr: None,
+// remote_addr: SocketAddr(net::SocketAddr::from_str("0.0.0.0:0").unwrap()),
+// };
+// let _ = unwrap_result!(transport::exchange_handshakes(dummy_handshake, transport));
+// });
+//
+// let t1 = unwrap_result!(t1);
+// let t2 = unwrap_result!(t2);
+// let t3 = unwrap_result!(t3);
+// unwrap_result!(t1.join());
+// unwrap_result!(t2.join());
+// unwrap_result!(t3.join());
+// }
+// }
+//
