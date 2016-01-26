@@ -67,14 +67,16 @@ use rustc_serialize::{Encodable, Decodable};
 const DISCOVERY: Token = Token(0);
 const SEEK_PEERS: Token = Token(1);
 
-/// TODO
+/// ServiceDiscovery is a RAII API for the purposes of discovering peers on the local network. To
+/// stop the process of discovery completely, it is sufficient to drop the instance of this struct.
 pub struct ServiceDiscovery<Reply: 'static + Encodable + Decodable + Send + Clone> {
     sender: mio::Sender<MioMessage<Reply>>,
     _raii_joiner: RaiiThreadJoiner,
 }
 
 impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Reply> {
-    /// TODO
+    /// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for
+    /// us is disabled.
     pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
         let (mio_msg_sender, raii_joiner) = try!(ServiceDiscoveryImpl::<Reply>::start(port, reply));
 
@@ -84,17 +86,21 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Rep
         })
     }
 
-    /// TODO
+    /// Register a new observer to be notified whenever we successfully find peers by interrogating
+    /// the network. Return value indicates acknowledgement of the request.
     pub fn register_seek_peer_observer(&self, observer: mpsc::Sender<Reply>) -> bool {
         self.sender.send(MioMessage::RegisterObserver(observer)).is_ok()
     }
 
-    /// TODO
-    pub fn listen_to_broadcasts(&self, listen: bool) -> bool {
+    /// Enable or disable listening and responding to peers searching for us. This will
+    /// correspondingly allow or disallow others from finding us by interrogating the network.
+    /// Return value indicates acknowledgement of the request.
+    pub fn set_listen_for_peers(&self, listen: bool) -> bool {
         self.sender.send(MioMessage::SetBroadcastListen(listen)).is_ok()
     }
 
-    /// TODO
+    /// Interrogate the network to find peers. Return value indicates acknowledgement of the
+    /// request.
     pub fn seek_peers(&self) -> bool {
         self.sender.send(MioMessage::SeekPeers).is_ok()
     }
@@ -104,10 +110,6 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> Drop for ServiceDisc
     fn drop(&mut self) {
         let _ = self.sender.send(MioMessage::Shutdown);
     }
-}
-
-trait TypeTrait {
-    type DiscoveryMsg;
 }
 
 #[derive(RustcEncodable, RustcDecodable)]
@@ -139,11 +141,7 @@ struct ServiceDiscoveryImpl<Reply> {
     observers: Vec<mpsc::Sender<Reply>>,
 }
 
-impl<Reply: 'static + Encodable + Decodable + Send + Clone> TypeTrait for ServiceDiscoveryImpl<Reply> {
-    type DiscoveryMsg = DiscoveryMsg<Reply>;
-}
-
-impl<Reply: 'static + Encodable + Decodable + Send + Clone> Handler for ServiceDiscoveryImpl<Reply> {
+impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceDiscoveryImpl<Reply> {
     type Timeout = ();
     type Message = MioMessage<Reply>;
 
