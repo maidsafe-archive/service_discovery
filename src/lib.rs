@@ -64,26 +64,71 @@
 
 // --------------------------------------------------------------------------------
 
+#[macro_use]
+extern crate log;
 extern crate mio;
-extern crate bytes;
+// extern crate bytes;
 extern crate rustc_serialize;
+#[macro_use]
+extern crate maidsafe_utilities;
 
+use std::sync::mpsc;
+use std::str::FromStr;
+use std::net::SocketAddr;
+use std::collections::VecDeque;
 use std::io;
+use std::io::{ErrorKind, Error};
+
+use maidsafe_utilities::thread::RaiiThreadJoiner;
+use maidsafe_utilities::serialisation::{serialise, deserialise};
 
 use mio::udp::UdpSocket;
-use mio::{EventLoop, EventSet, Token, Handler, PollOpt};
+use mio::{EventLoop, EventSet, Token, Handler, PollOpt, NotifyError};
 
-use bytes::RingBuf;
+// use bytes::RingBuf;
+// use bytes::buf::{Buf, MutBuf};
 
 use rustc_serialize::{Encodable, Decodable};
 
-const DISCOVERY: Token<usize> = Token(0);
+const DISCOVERY: Token = Token(0);
+const SEEK_PEERS: Token = Token(1);
 
-struct ServiceDiscovery<Reply> {
-    socket: UdpSocket,
-    read_buf: RingBuf,
-    serialised_reply: Vec<u8>,
-    observers: Vec<mpsc::Sender<Reply>>,
+pub struct ASDFG<Reply: 'static + Encodable + Decodable + Send + Clone> {
+    sender: mio::Sender<MioMessage<Reply>>,
+    _raii_joiner: RaiiThreadJoiner,
+}
+
+impl<Reply: 'static + Encodable + Decodable + Send + Clone> ASDFG<Reply> {
+    pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
+        let (mio_msg_sender, raii_joiner) = try!(ServiceDiscovery::<Reply>::start(port, reply));
+
+        Ok(ASDFG {
+            sender: mio_msg_sender,
+            _raii_joiner: raii_joiner,
+        })
+    }
+
+    pub fn register_seek_peer_observer(&self, observer: mpsc::Sender<Reply>) -> bool {
+        self.sender.send(MioMessage::RegisterObserver(observer)).is_ok()
+    }
+
+    pub fn listen_to_broadcasts(&self, listen: bool) -> bool {
+        self.sender.send(MioMessage::SetBroadcastListen(listen)).is_ok()
+    }
+
+    pub fn seek_peers(&self) -> bool {
+        self.sender.send(MioMessage::SeekPeers).is_ok()
+    }
+}
+
+impl<Reply: 'static + Encodable + Decodable + Send + Clone> Drop for ASDFG<Reply> {
+    fn drop(&mut self) {
+        let _ = self.sender.send(MioMessage::Shutdown);
+    }
+}
+
+trait TypeTrait {
+    type DiscoveryMsg;
 }
 
 #[derive(RustcEncodable, RustcDecodable)]
@@ -95,60 +140,169 @@ enum DiscoveryMsg<Reply: Encodable + Decodable> {
     },
 }
 
-impl<Reply: Encodable + Decodable> Handler for ServiceDiscovery<Reply> {
+enum MioMessage<Reply> {
+    RegisterObserver(mpsc::Sender<Reply>),
+    SetBroadcastListen(bool),
+    SeekPeers,
+    Shutdown,
+}
+
+struct ServiceDiscovery<Reply> {
+    guid: u64,
+    seek_peers_on: SocketAddr,
+    broadcast_listen: bool,
+    socket: UdpSocket,
+    // read_buf: RingBuf,
+    read_buf: [u8; 1024],
+    serialised_reply: Vec<u8>,
+    serialised_seek_peers_request: Vec<u8>,
+    reply_to: VecDeque<SocketAddr>,
+    observers: Vec<mpsc::Sender<Reply>>,
+}
+
+impl<Reply: 'static + Encodable + Decodable + Send + Clone> TypeTrait for ServiceDiscovery<Reply> {
+    type DiscoveryMsg = DiscoveryMsg<Reply>;
+}
+
+impl<Reply: 'static + Encodable + Decodable + Send + Clone> Handler for ServiceDiscovery<Reply> {
     type Timeout = ();
-    type Message = ();
+    type Message = MioMessage<Reply>;
 
     fn ready(&mut self, event_loop: &mut EventLoop<Self>, token: Token, events: EventSet) {
-        if events.is_readable() {
-            match token {
-                DISCOVERY => {}
-                _ => (),
+        if events.is_readable() && token == DISCOVERY {
+            if let Err(err) = self.readable(event_loop) {
+                error!("Error in readable - {:?}", err);
+                event_loop.shutdown();
             }
         }
 
         if events.is_writable() {
-            match token {
-                DISCOVERY => {}
-                _ => (),
+            if let Err(err) = self.writable(event_loop, token) {
+                error!("Error in writable - {:?}", err);
+                event_loop.shutdown();
             }
         }
     }
 
     fn notify(&mut self, event_loop: &mut EventLoop<Self>, msg: Self::Message) {
-        unimplemented!()
+        match msg {
+            MioMessage::RegisterObserver(observer) => self.observers.push(observer),
+            MioMessage::SetBroadcastListen(status) => {
+                self.broadcast_listen = status;
+            }
+            MioMessage::SeekPeers => {
+                match self.socket
+                          .send_to(&self.serialised_seek_peers_request, &self.seek_peers_on) {
+                    Ok(Some(_)) => {
+                        if let Err(err) = event_loop.reregister(&self.socket,
+                                                                DISCOVERY,
+                                                                EventSet::readable(),
+                                                                PollOpt::edge() |
+                                                                PollOpt::oneshot()) {
+                            error!("{:?}", err);
+                            event_loop.shutdown();
+                        }
+                    }
+                    Ok(None) => {
+                        if let Err(err) = event_loop.reregister(&self.socket,
+                                                                SEEK_PEERS,
+                                                                EventSet::writable(),
+                                                                PollOpt::edge() |
+                                                                PollOpt::oneshot()) {
+                            error!("{:?}", err);
+                            event_loop.shutdown();
+                        }
+                    }
+                    Err(err) => {
+                        error!("{:?}", err);
+                        event_loop.shutdown();
+                    }
+                }
+            }
+            MioMessage::Shutdown => event_loop.shutdown(),
+        }
     }
 }
 
-impl<Reply: Encodable + Decodable> ServiceDiscovery<Reply> {
-    type DiscoveryMsg = DiscoveryMsg<Reply>;
+impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Reply> {
+    pub fn start(port: u16,
+                 reply: Reply)
+                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner)> {
+        let serialised_reply = try!(serialise(&reply).map_err(|_| {
+            Error::new(ErrorKind::Other, "Serialisation Error. TODO: Improve this")
+        }));
+        let serialised_seek_peers_request =
+            try!(serialise::<DiscoveryMsg<Reply>>(&DiscoveryMsg::Request).map_err(|_| {
+                Error::new(ErrorKind::Other, "Serialisation Error. TODO: Improve this")
+            }));
 
-    pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
-        let udp_socket = UdpSocket::bound(format!("0.0.0.0:{}", port));
-        Ok(ServiceDiscovery { socket: udp_socket })
+        let bind_addr = try!(SocketAddr::from_str(&format!("0.0.0.0:{}", port))
+                                 .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e))));
+        let udp_socket = try!(UdpSocket::bound(&bind_addr));
+
+        let mut service_discovery = ServiceDiscovery {
+            guid: 0,
+            seek_peers_on: try!(SocketAddr::from_str(&format!("255.255.255.255:{}", port))
+                                    .map_err(|_| Error::new(ErrorKind::Other, "TODO"))),
+            broadcast_listen: false,
+            socket: udp_socket,
+            // read_buf: RingBuf::new(1024),
+            read_buf: [0; 1024],
+            serialised_reply: serialised_reply,
+            serialised_seek_peers_request: serialised_seek_peers_request,
+            reply_to: VecDeque::new(),
+            observers: Vec::new(),
+        };
+
+        let mut event_loop = try!(EventLoop::new());
+        try!(event_loop.register(&service_discovery.socket,
+                                 DISCOVERY,
+                                 EventSet::readable(),
+                                 PollOpt::edge() | PollOpt::oneshot()));
+
+        let mio_msg_sender = event_loop.channel();
+
+        let raii_joiner = RaiiThreadJoiner::new(thread!("MioServiceDiscovery", move || {
+            if let Err(err) = event_loop.run(&mut service_discovery) {
+                error!("Could not run the event loop for Service Discovery - {:?}",
+                       err);
+                event_loop.shutdown();
+            }
+        }));
+
+        Ok((mio_msg_sender, raii_joiner))
     }
 
     fn readable(&mut self, event_loop: &mut EventLoop<Self>) -> io::Result<()> {
-        if let Some(bytes_read, peer_addr) = try!(self.socket.recv_from(unsafe {
-            self.read_buf.mut_bytes()
-        })) {
-            let msg: DiscoveryMsg = deserialise(self.read_buf.bytes()) {
+        // if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(unsafe {
+        //     self.read_buf.mut_bytes()
+        // })) {
+        if let Some((_bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
+            let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..]) {
                 Ok(msg) => msg,
                 Err(_) => return Ok(()),
             };
 
             match msg {
                 DiscoveryMsg::Request => {
-                    try!(event_loop.reregister(&self,
-                                               DISCOVERY,
-                                               EventSet::writable(),
-                                               PollOpt::edge() | PollOpt::oneshot()));
+                    if self.broadcast_listen {
+                        self.reply_to.push_back(peer_addr);
+                        try!(event_loop.reregister(&self.socket,
+                                                   DISCOVERY,
+                                                   EventSet::writable(),
+                                                   PollOpt::edge() | PollOpt::oneshot()));
+                    } else {
+                        try!(event_loop.reregister(&self.socket,
+                                                   DISCOVERY,
+                                                   EventSet::readable(),
+                                                   PollOpt::edge() | PollOpt::oneshot()));
+                    }
                 }
                 DiscoveryMsg::Response { guid, content } => {
                     if guid != self.guid {
                         self.observers.retain(|observer| observer.send(content.clone()).is_ok());
                     }
-                    try!(event_loop.reregister(&self,
+                    try!(event_loop.reregister(&self.socket,
                                                DISCOVERY,
                                                EventSet::readable(),
                                                PollOpt::edge() | PollOpt::oneshot()));
@@ -156,11 +310,54 @@ impl<Reply: Encodable + Decodable> ServiceDiscovery<Reply> {
             }
         }
 
-        Ok(self.read_buf.clear())
+        Ok(())
+        // Ok(self.read_buf.clear())
     }
 
-    fn writable(&mut self, event_loop: &mut EventLoop<Self>) -> io::Result<()> {
-        
+    fn writable(&mut self, event_loop: &mut EventLoop<Self>, token: Token) -> io::Result<()> {
+        if token == DISCOVERY {
+            while let Some(peer_addr) = self.reply_to.pop_front() {
+                let mut sent_bytes = 0;
+                while sent_bytes != self.serialised_reply.len() {
+                    match try!(self.socket
+                                   .send_to(&self.serialised_reply[sent_bytes..], &peer_addr)) {
+                        Some(bytes_tx) => {
+                            sent_bytes += bytes_tx;
+                        }
+                        None => {
+                            try!(event_loop.reregister(&self.socket,
+                                                       DISCOVERY,
+                                                       EventSet::writable(),
+                                                       PollOpt::edge() | PollOpt::oneshot()));
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        } else if token == SEEK_PEERS {
+            let mut sent_bytes = 0;
+            while sent_bytes != self.serialised_seek_peers_request.len() {
+                match try!(self.socket
+                               .send_to(&self.serialised_seek_peers_request[sent_bytes..],
+                                        &self.seek_peers_on)) {
+                    Some(bytes_tx) => {
+                        sent_bytes += bytes_tx;
+                    }
+                    None => {
+                        try!(event_loop.reregister(&self.socket,
+                                                   SEEK_PEERS,
+                                                   EventSet::writable(),
+                                                   PollOpt::edge() | PollOpt::oneshot()));
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        Ok(try!(event_loop.reregister(&self.socket,
+                                      DISCOVERY,
+                                      EventSet::readable(),
+                                      PollOpt::edge() | PollOpt::oneshot())))
     }
 }
 
