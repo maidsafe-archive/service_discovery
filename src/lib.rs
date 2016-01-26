@@ -38,32 +38,6 @@
 #![allow(box_pointers, fat_ptr_transmutes, missing_copy_implementations,
          missing_debug_implementations)]
 
-// #[macro_use]
-// extern crate maidsafe_utilities;
-
-// extern crate rand;
-// extern crate ip;
-// extern crate net2;
-// extern crate rustc_serialize;
-//
-// use rand::random;
-// use rustc_serialize::Encodable;
-// use std::error::Error;
-// use std::io;
-// use std::net::{SocketAddr, UdpSocket};
-// use std::net;
-// use std::str::FromStr;
-// use std::sync::{Arc, mpsc, Mutex};
-// use std::sync::atomic::AtomicBool;
-// use std::thread;
-// use std::time::Duration;
-// use ip::SocketAddrExt;
-// use net2::UdpSocketExt;
-// use maidsafe_utilities::thread::RaiiThreadJoiner;
-// use maidsafe_utilities::serialisation::serialise;
-
-// --------------------------------------------------------------------------------
-
 #[macro_use]
 extern crate log;
 extern crate mio;
