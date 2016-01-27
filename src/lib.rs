@@ -336,10 +336,9 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
                     guid: self.guid,
                     content: self.reply.clone(),
                 };
-                let serialised_response = try!(serialise(&discovery_response).map_err(|_| {
-                    io::Error::new(io::ErrorKind::Other,
-                                   "Serialisation Error. TODO: Improve this")
-                }));
+                // We already tested the serialisation in the beginning so ok to unwrap_result!()
+                // now
+                let serialised_response = unwrap_result!(serialise(&discovery_response));
                 let mut sent_bytes = 0;
                 while sent_bytes != serialised_response.len() {
                     match try!(self.socket
