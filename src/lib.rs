@@ -145,7 +145,7 @@ struct ServiceDiscoveryImpl<Reply> {
     socket: UdpSocket,
     // read_buf: RingBuf,
     read_buf: [u8; 1024],
-    serialised_reply: Vec<u8>,
+    reply: Reply,
     serialised_seek_peers_request: Vec<u8>,
     reply_to: VecDeque<SocketAddr>,
     observers: Vec<mpsc::Sender<Reply>>,
@@ -220,11 +220,9 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
                  reply: Reply)
                  -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)> {
         let guid = rand::random();
-        let reply = DiscoveryMsg::Response {
-            guid: guid,
-            content: reply,
-        };
-        let serialised_reply = try!(serialise(&reply).map_err(|_| {
+        // Checking right at the begginning if it can be serialised so that we can simply
+        // unwrap_result!() later
+        let _ = try!(serialise(&reply).map_err(|_| {
             io::Error::new(io::ErrorKind::Other,
                            "Serialisation Error. TODO: Improve this")
         }));
@@ -265,7 +263,7 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
             socket: udp_socket,
             // read_buf: RingBuf::new(1024),
             read_buf: [0; 1024],
-            serialised_reply: serialised_reply,
+            reply: reply,
             serialised_seek_peers_request: serialised_seek_peers_request,
             reply_to: VecDeque::new(),
             observers: Vec::new(),
@@ -334,10 +332,18 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
     fn writable(&mut self, event_loop: &mut EventLoop<Self>, token: Token) -> io::Result<()> {
         if token == DISCOVERY {
             while let Some(peer_addr) = self.reply_to.pop_front() {
+                let discovery_response = DiscoveryMsg::Response {
+                    guid: self.guid,
+                    content: self.reply.clone(),
+                };
+                let serialised_response = try!(serialise(&discovery_response).map_err(|_| {
+                    io::Error::new(io::ErrorKind::Other,
+                                   "Serialisation Error. TODO: Improve this")
+                }));
                 let mut sent_bytes = 0;
-                while sent_bytes != self.serialised_reply.len() {
+                while sent_bytes != serialised_response.len() {
                     match try!(self.socket
-                                   .send_to(&self.serialised_reply[sent_bytes..], &peer_addr)) {
+                                   .send_to(&serialised_response[sent_bytes..], &peer_addr)) {
                         Some(bytes_tx) => {
                             sent_bytes += bytes_tx;
                         }
