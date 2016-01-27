@@ -45,13 +45,15 @@ extern crate mio;
 extern crate rustc_serialize;
 #[macro_use]
 extern crate maidsafe_utilities;
+extern crate void;
+//extern crate libc;
+extern crate rand;
 
 use std::sync::mpsc;
 use std::str::FromStr;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::VecDeque;
 use std::io;
-use std::io::{ErrorKind, Error};
 
 use maidsafe_utilities::thread::RaiiThreadJoiner;
 use maidsafe_utilities::serialisation::{serialise, deserialise};
@@ -64,6 +66,8 @@ use mio::{EventLoop, EventSet, Token, Handler, PollOpt};
 
 use rustc_serialize::{Encodable, Decodable};
 
+use void::Void;
+
 const DISCOVERY: Token = Token(0);
 const SEEK_PEERS: Token = Token(1);
 
@@ -71,6 +75,8 @@ const SEEK_PEERS: Token = Token(1);
 /// stop the process of discovery completely, it is sufficient to drop the instance of this struct.
 pub struct ServiceDiscovery<Reply: 'static + Encodable + Decodable + Send + Clone> {
     sender: mio::Sender<MioMessage<Reply>>,
+    requested_port: u16,
+    bound_port: u16,
     _raii_joiner: RaiiThreadJoiner,
 }
 
@@ -78,10 +84,12 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Rep
     /// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for
     /// us is disabled.
     pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
-        let (mio_msg_sender, raii_joiner) = try!(ServiceDiscoveryImpl::<Reply>::start(port, reply));
+        let (mio_msg_sender, raii_joiner, bound_port) = try!(ServiceDiscoveryImpl::<Reply>::start(port, reply));
 
         Ok(ServiceDiscovery {
             sender: mio_msg_sender,
+            requested_port: port,
+            bound_port: bound_port,
             _raii_joiner: raii_joiner,
         })
     }
@@ -96,7 +104,12 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Rep
     /// correspondingly allow or disallow others from finding us by interrogating the network.
     /// Return value indicates acknowledgement of the request.
     pub fn set_listen_for_peers(&self, listen: bool) -> bool {
-        self.sender.send(MioMessage::SetBroadcastListen(listen)).is_ok()
+        if self.requested_port == self.bound_port {
+            self.sender.send(MioMessage::SetBroadcastListen(listen)).is_ok()
+        }
+        else {
+            false
+        }
     }
 
     /// Interrogate the network to find peers. Return value indicates acknowledgement of the
@@ -142,7 +155,7 @@ struct ServiceDiscoveryImpl<Reply> {
 }
 
 impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceDiscoveryImpl<Reply> {
-    type Timeout = ();
+    type Timeout = Void;
     type Message = MioMessage<Reply>;
 
     fn ready(&mut self, event_loop: &mut EventLoop<Self>, token: Token, events: EventSet) {
@@ -163,7 +176,9 @@ impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceD
 
     fn notify(&mut self, event_loop: &mut EventLoop<Self>, msg: Self::Message) {
         match msg {
-            MioMessage::RegisterObserver(observer) => self.observers.push(observer),
+            MioMessage::RegisterObserver(observer) => {
+                self.observers.push(observer);
+            },
             MioMessage::SetBroadcastListen(status) => {
                 self.broadcast_listen = status;
             }
@@ -196,7 +211,9 @@ impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceD
                     }
                 }
             }
-            MioMessage::Shutdown => event_loop.shutdown(),
+            MioMessage::Shutdown => {
+                event_loop.shutdown();
+            },
         }
     }
 }
@@ -204,23 +221,43 @@ impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceD
 impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl<Reply> {
     pub fn start(port: u16,
                  reply: Reply)
-                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner)> {
+                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)> {
+        let guid = rand::random();
+        let reply = DiscoveryMsg::Response {
+            guid: guid,
+            content: reply,
+        };
         let serialised_reply = try!(serialise(&reply).map_err(|_| {
-            Error::new(ErrorKind::Other, "Serialisation Error. TODO: Improve this")
+            io::Error::new(io::ErrorKind::Other, "Serialisation Error. TODO: Improve this")
         }));
         let serialised_seek_peers_request =
             try!(serialise::<DiscoveryMsg<Reply>>(&DiscoveryMsg::Request).map_err(|_| {
-                Error::new(ErrorKind::Other, "Serialisation Error. TODO: Improve this")
+                io::Error::new(io::ErrorKind::Other, "Serialisation Error. TODO: Improve this")
             }));
 
-        let bind_addr = try!(SocketAddr::from_str(&format!("0.0.0.0:{}", port))
-                                 .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e))));
-        let udp_socket = try!(UdpSocket::bound(&bind_addr));
+        let bind_addr = unwrap_option!(try!(("0.0.0.0", port).to_socket_addrs()).next(),
+                                       "Failed to parse socket address");
+
+        let udp_socket = try!(UdpSocket::v4());
+        //try!(enable_so_reuseport(&udp_socket));
+        try!(udp_socket.set_broadcast(true));
+        let bound_port = match udp_socket.bind(&bind_addr) {
+            Ok(()) => port,
+            Err(e) => match e.kind() {
+                io::ErrorKind::AddrInUse => {
+                    let addr = try!(SocketAddr::from_str("0.0.0.0:0").map_err(|_| io::Error::new(io::ErrorKind::Other, "failed to parse addr")));
+                    try!(udp_socket.bind(&addr));
+                    let addr = try!(udp_socket.local_addr());
+                    addr.port()
+                },
+                _ => return Err(e),
+            },
+        };
 
         let mut discovery_impl = ServiceDiscoveryImpl {
-            guid: 0,
+            guid: guid,
             seek_peers_on: try!(SocketAddr::from_str(&format!("255.255.255.255:{}", port))
-                                    .map_err(|_| Error::new(ErrorKind::Other, "TODO"))),
+                                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "TODO"))),
             broadcast_listen: false,
             socket: udp_socket,
             // read_buf: RingBuf::new(1024),
@@ -247,15 +284,15 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
             }
         }));
 
-        Ok((mio_msg_sender, raii_joiner))
+        Ok((mio_msg_sender, raii_joiner, bound_port))
     }
 
     fn readable(&mut self, event_loop: &mut EventLoop<Self>) -> io::Result<()> {
         // if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(unsafe {
         //     self.read_buf.mut_bytes()
         // })) {
-        if let Some((_bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
-            let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..]) {
+        if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
+            let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..bytes_read]) {
                 Ok(msg) => msg,
                 Err(_) => return Ok(()),
             };
@@ -337,3 +374,57 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
                                       PollOpt::edge() | PollOpt::oneshot())))
     }
 }
+
+// TODO(canndrew): Look into using this reuseport stuff so that we can have multiple peers on the
+// same machine all listening for peers
+/*
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+fn enable_so_reuseport(sock: &UdpSocket) -> io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+
+    let one: libc::c_int = 1;
+    let raw_fd = sock.as_raw_fd();
+    let one_ptr: *const libc::c_int = &one;
+    unsafe {
+        if libc::setsockopt(raw_fd,
+                            libc::SOL_SOCKET,
+                            libc::SO_REUSEADDR,
+                            one_ptr as *const libc::c_void,
+                            std::mem::size_of::<libc::c_int>() as libc::socklen_t
+            ) < 0
+        {
+            return Err(io::Error::last_os_error());
+        };
+    }
+    Ok(())
+}
+*/
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn three_peer_localhost_discovery() {
+        let (tx0, _rx0) = mpsc::channel();
+        let sd0 = unwrap_result!(ServiceDiscovery::new(45666, 0u32));
+        assert!(sd0.register_seek_peer_observer(tx0));
+        assert!(sd0.set_listen_for_peers(true));
+
+        let (tx1, rx1) = mpsc::channel();
+        let sd1 = unwrap_result!(ServiceDiscovery::new(45666, 1u32));
+        assert!(sd1.register_seek_peer_observer(tx1));
+        assert!(sd1.seek_peers());
+
+        thread::sleep(Duration::from_millis(100));
+        match rx1.try_recv() {
+            Ok(0u32) => (),
+            x => panic!("Unexpected result: {:?}", x),
+        };
+    }
+}
+
