@@ -257,7 +257,9 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
                         let addr = try!(SocketAddr::from_str("0.0.0.0:0").map_err(|_| {
                             io::Error::new(io::ErrorKind::Other, "failed to parse addr")
                         }));
+                        println!("Trying to re-bind");
                         try!(udp_socket.bind(&addr));
+                        println!("Rebound");
                         let addr = try!(udp_socket.local_addr());
                         addr.port()
                     }
