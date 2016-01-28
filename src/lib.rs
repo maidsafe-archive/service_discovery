@@ -84,8 +84,18 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Rep
     /// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for
     /// us is disabled.
     pub fn new(port: u16, reply: Reply) -> io::Result<Self> {
-        let (mio_msg_sender, raii_joiner, bound_port) =
-            try!(ServiceDiscoveryImpl::<Reply>::start(port, reply));
+        let generator = move || reply.clone();
+        ServiceDiscovery::new_with_generator(port, generator)
+    }
+
+    /// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for
+    /// us is disabled. This function is similar to `new` except that it takes a callback which
+    /// generates replies on demand. This is useful if the reply you need to send might change
+    /// throughout the lifetime of the ServiceDiscovery.
+    pub fn new_with_generator<ReplyGen>(port: u16, generator: ReplyGen) -> io::Result<ServiceDiscovery<Reply>>
+        where ReplyGen: FnMut() -> Reply + 'static + Send
+    {
+        let (mio_msg_sender, raii_joiner, bound_port) = try!(ServiceDiscoveryImpl::<Reply, ReplyGen>::start(port, generator));
 
         Ok(ServiceDiscovery {
             sender: mio_msg_sender,
@@ -138,20 +148,23 @@ enum MioMessage<Reply> {
     Shutdown,
 }
 
-struct ServiceDiscoveryImpl<Reply> {
+struct ServiceDiscoveryImpl<Reply, ReplyGen> {
     guid: u64,
     seek_peers_on: SocketAddr,
     broadcast_listen: bool,
     socket: UdpSocket,
     // read_buf: RingBuf,
     read_buf: [u8; 1024],
-    reply: Reply,
+    reply_gen: ReplyGen,
     serialised_seek_peers_request: Vec<u8>,
     reply_to: VecDeque<SocketAddr>,
     observers: Vec<mpsc::Sender<Reply>>,
 }
 
-impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceDiscoveryImpl<Reply> {
+impl<Reply, ReplyGen> Handler for ServiceDiscoveryImpl<Reply, ReplyGen>
+        where Reply: Encodable + Decodable + Send + Clone + 'static,
+              ReplyGen: FnMut() -> Reply + Send + 'static
+{
     type Timeout = Void;
     type Message = MioMessage<Reply>;
 
@@ -215,17 +228,15 @@ impl<Reply: 'static + Send + Clone + Encodable + Decodable> Handler for ServiceD
     }
 }
 
-impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl<Reply> {
+impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
+        where Reply: Encodable + Decodable + Send + Clone + 'static,
+              ReplyGen: FnMut() -> Reply + Send + 'static
+{
     pub fn start(port: u16,
-                 reply: Reply)
-                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)> {
+                 reply_gen: ReplyGen)
+                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)>
+    {
         let guid = rand::random();
-        // Checking right at the begginning if it can be serialised so that we can simply
-        // unwrap_result!() later
-        let _ = try!(serialise(&reply).map_err(|_| {
-            io::Error::new(io::ErrorKind::Other,
-                           "Serialisation Error. TODO: Improve this")
-        }));
         let serialised_seek_peers_request =
             try!(serialise::<DiscoveryMsg<Reply>>(&DiscoveryMsg::Request).map_err(|_| {
                 io::Error::new(io::ErrorKind::Other,
@@ -263,7 +274,7 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
             socket: udp_socket,
             // read_buf: RingBuf::new(1024),
             read_buf: [0; 1024],
-            reply: reply,
+            reply_gen: reply_gen,
             serialised_seek_peers_request: serialised_seek_peers_request,
             reply_to: VecDeque::new(),
             observers: Vec::new(),
@@ -295,7 +306,9 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
         if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
             let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..bytes_read]) {
                 Ok(msg) => msg,
-                Err(_) => return Ok(()),
+                Err(_) => {
+                    return Ok(());
+                }
             };
 
             match msg {
@@ -331,18 +344,17 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscoveryImpl
 
     fn writable(&mut self, event_loop: &mut EventLoop<Self>, token: Token) -> io::Result<()> {
         if token == DISCOVERY {
+            let reply = DiscoveryMsg::Response {
+                guid: self.guid,
+                content: (self.reply_gen)(),
+            };
+            let serialised_reply = try!(serialise(&reply).map_err(|_|
+                io::Error::new(io::ErrorKind::Other, "Failed to serialise reply")));
             while let Some(peer_addr) = self.reply_to.pop_front() {
-                let discovery_response = DiscoveryMsg::Response {
-                    guid: self.guid,
-                    content: self.reply.clone(),
-                };
-                // We already tested the serialisation in the beginning so ok to unwrap_result!()
-                // now
-                let serialised_response = unwrap_result!(serialise(&discovery_response));
                 let mut sent_bytes = 0;
-                while sent_bytes != serialised_response.len() {
+                while sent_bytes != serialised_reply.len() {
                     match try!(self.socket
-                                   .send_to(&serialised_response[sent_bytes..], &peer_addr)) {
+                                   .send_to(&serialised_reply[sent_bytes..], &peer_addr)) {
                         Some(bytes_tx) => {
                             sent_bytes += bytes_tx;
                         }
