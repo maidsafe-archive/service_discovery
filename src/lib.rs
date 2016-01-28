@@ -474,16 +474,15 @@ mod tests {
     #[test]
     fn localhost_discovery_with_generator() {
         let (tx0, _rx0) = mpsc::channel();
-        let reply_gen0 = || 0u32;
         let mut rng = rand::thread_rng();
         let range = rand::distributions::Range::new(1024, 65535);
         let mut port: u16 = range.ind_sample(&mut rng);
-        let mut sd0 = ServiceDiscovery::new_with_generator(port, reply_gen0);
+        let mut sd0 = ServiceDiscovery::new_with_generator(port, || 0u32);
 
         if sd0.is_err() {
             for _ in 0..10 {
                 port = range.ind_sample(&mut rng);
-                if let Ok(sd) = ServiceDiscovery::new(port, 0u32) {
+                if let Ok(sd) = ServiceDiscovery::new_with_generator(port, || 0u32) {
                     sd0 = Ok(sd);
                     break;
                 }
@@ -497,8 +496,7 @@ mod tests {
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let reply_gen1 = || 1u32;
-        let sd1 = unwrap_result!(ServiceDiscovery::new_with_generator(port, reply_gen1));
+        let sd1 = unwrap_result!(ServiceDiscovery::new_with_generator(port, || 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd1.seek_peers());
 
