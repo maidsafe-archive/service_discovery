@@ -1,5 +1,8 @@
 # service_discovery - Change Log
 
+## [0.2.0]
+- API now has a new constructor that takes in a closure which allows for, among other things, mutation of `reply`.
+
 ## [0.1.1]
 - Templated Reply will be serialised everytime there is a need for response so that the new response gets an
   updated reply

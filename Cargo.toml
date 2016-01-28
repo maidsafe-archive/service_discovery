@@ -7,7 +7,7 @@ license = "GPL-3.0"
 name = "service_discovery"
 readme = "README.md"
 repository = "https://github.com/maidsafe/service_discovery"
-version = "0.1.2"
+version = "0.2.0"
 
 [dependencies]
 bytes = "~0.3.0"
