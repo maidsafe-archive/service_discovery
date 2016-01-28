@@ -306,7 +306,9 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
         if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
             let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..bytes_read]) {
                 Ok(msg) => msg,
-                Err(_) => return Ok(()),
+                Err(_) => {
+                    return Ok(());
+                }
             };
 
             match msg {
@@ -342,7 +344,10 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
 
     fn writable(&mut self, event_loop: &mut EventLoop<Self>, token: Token) -> io::Result<()> {
         if token == DISCOVERY {
-            let reply = (self.reply_gen)();
+            let reply = DiscoveryMsg::Response {
+                guid: self.guid,
+                content: (self.reply_gen)(),
+            };
             let serialised_reply = try!(serialise(&reply).map_err(|_|
                 io::Error::new(io::ErrorKind::Other, "Failed to serialise reply")));
             while let Some(peer_addr) = self.reply_to.pop_front() {
