@@ -92,10 +92,13 @@ impl<Reply: 'static + Encodable + Decodable + Send + Clone> ServiceDiscovery<Rep
     /// us is disabled. This function is similar to `new` except that it takes a callback which
     /// generates replies on demand. This is useful if the reply you need to send might change
     /// throughout the lifetime of the ServiceDiscovery.
-    pub fn new_with_generator<ReplyGen>(port: u16, generator: ReplyGen) -> io::Result<ServiceDiscovery<Reply>>
+    pub fn new_with_generator<ReplyGen>(port: u16,
+                                        generator: ReplyGen)
+                                        -> io::Result<ServiceDiscovery<Reply>>
         where ReplyGen: FnMut() -> Reply + 'static + Send
     {
-        let (mio_msg_sender, raii_joiner, bound_port) = try!(ServiceDiscoveryImpl::<Reply, ReplyGen>::start(port, generator));
+        let (mio_msg_sender, raii_joiner, bound_port) =
+            try!(ServiceDiscoveryImpl::<Reply, ReplyGen>::start(port, generator));
 
         Ok(ServiceDiscovery {
             sender: mio_msg_sender,
@@ -162,8 +165,8 @@ struct ServiceDiscoveryImpl<Reply, ReplyGen> {
 }
 
 impl<Reply, ReplyGen> Handler for ServiceDiscoveryImpl<Reply, ReplyGen>
-        where Reply: Encodable + Decodable + Send + Clone + 'static,
-              ReplyGen: FnMut() -> Reply + Send + 'static
+    where Reply: Encodable + Decodable + Send + Clone + 'static,
+          ReplyGen: FnMut() -> Reply + Send + 'static
 {
     type Timeout = Void;
     type Message = MioMessage<Reply>;
@@ -229,13 +232,12 @@ impl<Reply, ReplyGen> Handler for ServiceDiscoveryImpl<Reply, ReplyGen>
 }
 
 impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
-        where Reply: Encodable + Decodable + Send + Clone + 'static,
-              ReplyGen: FnMut() -> Reply + Send + 'static
+    where Reply: Encodable + Decodable + Send + Clone + 'static,
+          ReplyGen: FnMut() -> Reply + Send + 'static
 {
     pub fn start(port: u16,
                  reply_gen: ReplyGen)
-                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)>
-    {
+                 -> io::Result<(mio::Sender<MioMessage<Reply>>, RaiiThreadJoiner, u16)> {
         let guid = rand::random();
         let serialised_seek_peers_request =
             try!(serialise::<DiscoveryMsg<Reply>>(&DiscoveryMsg::Request).map_err(|_| {
@@ -248,7 +250,6 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
 
         let udp_socket = try!(UdpSocket::v4());
         // try!(enable_so_reuseport(&udp_socket));
-        try!(udp_socket.set_broadcast(true));
         let bound_port = match udp_socket.bind(&bind_addr) {
             Ok(()) => port,
             Err(e) => {
@@ -265,6 +266,8 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
                 }
             }
         };
+
+        try!(udp_socket.set_broadcast(true));
 
         let mut discovery_impl = ServiceDiscoveryImpl {
             guid: guid,
@@ -348,8 +351,9 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
                 guid: self.guid,
                 content: (self.reply_gen)(),
             };
-            let serialised_reply = try!(serialise(&reply).map_err(|_|
-                io::Error::new(io::ErrorKind::Other, "Failed to serialise reply")));
+            let serialised_reply = try!(serialise(&reply).map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "Failed to serialise reply")
+            }));
             while let Some(peer_addr) = self.reply_to.pop_front() {
                 let mut sent_bytes = 0;
                 while sent_bytes != serialised_reply.len() {
