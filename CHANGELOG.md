@@ -1,5 +1,8 @@
 # service_discovery - Change Log
 
+## [0.2.1]
+- Bug Fix on Windows - Fixes Issue 12
+
 ## [0.2.0]
 - API now has a new constructor that takes in a closure which allows for, among other things, mutation of `reply`.
 
