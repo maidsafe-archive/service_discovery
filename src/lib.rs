@@ -456,12 +456,12 @@ mod tests {
     fn localhost_discovery_with_generator() {
         let (tx0, _rx0) = mpsc::channel();
         let reply_gen = || 0u32;
-        let sd0 = unwrap_result!(ServiceDiscovery::new_with_generator(45666, reply_gen));
+        let sd0 = unwrap_result!(ServiceDiscovery::new_with_generator(45667, reply_gen));
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let sd1 = unwrap_result!(ServiceDiscovery::new(45666, 1u32));
+        let sd1 = unwrap_result!(ServiceDiscovery::new(45667, 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd1.seek_peers());
 
@@ -475,12 +475,12 @@ mod tests {
     #[test]
     fn localhost_discovery_stop_listening() {
         let (tx0, _rx0) = mpsc::channel();
-        let sd0 = unwrap_result!(ServiceDiscovery::new(45666, 0u32));
+        let sd0 = unwrap_result!(ServiceDiscovery::new(45668, 0u32));
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let sd1 = unwrap_result!(ServiceDiscovery::new(45666, 1u32));
+        let sd1 = unwrap_result!(ServiceDiscovery::new(45668, 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd0.set_listen_for_peers(false));
         assert!(sd1.seek_peers());
