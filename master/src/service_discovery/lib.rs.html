@@ -479,6 +479,18 @@
 <span id="436">436</span>
 <span id="437">437</span>
 <span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 MaidSafe.net limited.</span>
 <span class='comment'>//</span>
@@ -566,8 +578,18 @@
     <span class='doccomment'>/// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for</span>
     <span class='doccomment'>/// us is disabled.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>port</span>: <span class='ident'>u16</span>, <span class='ident'>reply</span>: <span class='ident'>Reply</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span> {
-        <span class='kw'>let</span> (<span class='ident'>mio_msg_sender</span>, <span class='ident'>raii_joiner</span>, <span class='ident'>bound_port</span>) <span class='op'>=</span>
-            <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ServiceDiscoveryImpl</span>::<span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span>::<span class='ident'>start</span>(<span class='ident'>port</span>, <span class='ident'>reply</span>));
+        <span class='kw'>let</span> <span class='ident'>generator</span> <span class='op'>=</span> <span class='kw'>move</span> <span class='op'>||</span> <span class='ident'>reply</span>.<span class='ident'>clone</span>();
+        <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new_with_generator</span>(<span class='ident'>port</span>, <span class='ident'>generator</span>)
+    }
+
+    <span class='doccomment'>/// Obtain a new RAII instance of ServiceDiscovery. By default listening to peers searching for</span>
+    <span class='doccomment'>/// us is disabled. This function is similar to `new` except that it takes a callback which</span>
+    <span class='doccomment'>/// generates replies on demand. This is useful if the reply you need to send might change</span>
+    <span class='doccomment'>/// throughout the lifetime of the ServiceDiscovery.</span>
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new_with_generator</span><span class='op'>&lt;</span><span class='ident'>ReplyGen</span><span class='op'>&gt;</span>(<span class='ident'>port</span>: <span class='ident'>u16</span>, <span class='ident'>generator</span>: <span class='ident'>ReplyGen</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>ServiceDiscovery</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;&gt;</span>
+        <span class='kw'>where</span> <span class='ident'>ReplyGen</span>: <span class='ident'>FnMut</span>() <span class='op'>-&gt;</span> <span class='ident'>Reply</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> <span class='op'>+</span> <span class='ident'>Send</span>
+    {
+        <span class='kw'>let</span> (<span class='ident'>mio_msg_sender</span>, <span class='ident'>raii_joiner</span>, <span class='ident'>bound_port</span>) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ServiceDiscoveryImpl</span>::<span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span>::<span class='ident'>start</span>(<span class='ident'>port</span>, <span class='ident'>generator</span>));
 
         <span class='prelude-val'>Ok</span>(<span class='ident'>ServiceDiscovery</span> {
             <span class='ident'>sender</span>: <span class='ident'>mio_msg_sender</span>,
@@ -620,20 +642,23 @@
     <span class='ident'>Shutdown</span>,
 }
 
-<span class='kw'>struct</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> {
+<span class='kw'>struct</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span> {
     <span class='ident'>guid</span>: <span class='ident'>u64</span>,
     <span class='ident'>seek_peers_on</span>: <span class='ident'>SocketAddr</span>,
     <span class='ident'>broadcast_listen</span>: <span class='ident'>bool</span>,
     <span class='ident'>socket</span>: <span class='ident'>UdpSocket</span>,
     <span class='comment'>// read_buf: RingBuf,</span>
     <span class='ident'>read_buf</span>: [<span class='ident'>u8</span>; <span class='number'>1024</span>],
-    <span class='ident'>reply</span>: <span class='ident'>Reply</span>,
+    <span class='ident'>reply_gen</span>: <span class='ident'>ReplyGen</span>,
     <span class='ident'>serialised_seek_peers_request</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>,
     <span class='ident'>reply_to</span>: <span class='ident'>VecDeque</span><span class='op'>&lt;</span><span class='ident'>SocketAddr</span><span class='op'>&gt;</span>,
     <span class='ident'>observers</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>mpsc</span>::<span class='ident'>Sender</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;&gt;</span>,
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>: <span class='lifetime'>&#39;static</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Clone</span> <span class='op'>+</span> <span class='ident'>Encodable</span> <span class='op'>+</span> <span class='ident'>Decodable</span><span class='op'>&gt;</span> <span class='ident'>Handler</span> <span class='kw'>for</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span> <span class='ident'>Handler</span> <span class='kw'>for</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span>
+        <span class='kw'>where</span> <span class='ident'>Reply</span>: <span class='ident'>Encodable</span> <span class='op'>+</span> <span class='ident'>Decodable</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Clone</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
+              <span class='ident'>ReplyGen</span>: <span class='ident'>FnMut</span>() <span class='op'>-&gt;</span> <span class='ident'>Reply</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
+{
     <span class='kw'>type</span> <span class='ident'>Timeout</span> <span class='op'>=</span> <span class='ident'>Void</span>;
     <span class='kw'>type</span> <span class='ident'>Message</span> <span class='op'>=</span> <span class='ident'>MioMessage</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span>;
 
@@ -697,17 +722,15 @@
     }
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>: <span class='lifetime'>&#39;static</span> <span class='op'>+</span> <span class='ident'>Encodable</span> <span class='op'>+</span> <span class='ident'>Decodable</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Clone</span><span class='op'>&gt;</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span> <span class='ident'>ServiceDiscoveryImpl</span><span class='op'>&lt;</span><span class='ident'>Reply</span>, <span class='ident'>ReplyGen</span><span class='op'>&gt;</span>
+        <span class='kw'>where</span> <span class='ident'>Reply</span>: <span class='ident'>Encodable</span> <span class='op'>+</span> <span class='ident'>Decodable</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='ident'>Clone</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
+              <span class='ident'>ReplyGen</span>: <span class='ident'>FnMut</span>() <span class='op'>-&gt;</span> <span class='ident'>Reply</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
+{
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>start</span>(<span class='ident'>port</span>: <span class='ident'>u16</span>,
-                 <span class='ident'>reply</span>: <span class='ident'>Reply</span>)
-                 <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>mio</span>::<span class='ident'>Sender</span><span class='op'>&lt;</span><span class='ident'>MioMessage</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;&gt;</span>, <span class='ident'>RaiiThreadJoiner</span>, <span class='ident'>u16</span>)<span class='op'>&gt;</span> {
+                 <span class='ident'>reply_gen</span>: <span class='ident'>ReplyGen</span>)
+                 <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>mio</span>::<span class='ident'>Sender</span><span class='op'>&lt;</span><span class='ident'>MioMessage</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;&gt;</span>, <span class='ident'>RaiiThreadJoiner</span>, <span class='ident'>u16</span>)<span class='op'>&gt;</span>
+    {
         <span class='kw'>let</span> <span class='ident'>guid</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>random</span>();
-        <span class='comment'>// Checking right at the begginning if it can be serialised so that we can simply</span>
-        <span class='comment'>// unwrap_result!() later</span>
-        <span class='kw'>let</span> _ <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>serialise</span>(<span class='kw-2'>&amp;</span><span class='ident'>reply</span>).<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> {
-            <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>new</span>(<span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>Other</span>,
-                           <span class='string'>&quot;Serialisation Error. TODO: Improve this&quot;</span>)
-        }));
         <span class='kw'>let</span> <span class='ident'>serialised_seek_peers_request</span> <span class='op'>=</span>
             <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>serialise</span>::<span class='op'>&lt;</span><span class='ident'>DiscoveryMsg</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;&gt;</span>(<span class='kw-2'>&amp;</span><span class='ident'>DiscoveryMsg</span>::<span class='ident'>Request</span>).<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> {
                 <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>new</span>(<span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>Other</span>,
@@ -745,7 +768,7 @@
             <span class='ident'>socket</span>: <span class='ident'>udp_socket</span>,
             <span class='comment'>// read_buf: RingBuf::new(1024),</span>
             <span class='ident'>read_buf</span>: [<span class='number'>0</span>; <span class='number'>1024</span>],
-            <span class='ident'>reply</span>: <span class='ident'>reply</span>,
+            <span class='ident'>reply_gen</span>: <span class='ident'>reply_gen</span>,
             <span class='ident'>serialised_seek_peers_request</span>: <span class='ident'>serialised_seek_peers_request</span>,
             <span class='ident'>reply_to</span>: <span class='ident'>VecDeque</span>::<span class='ident'>new</span>(),
             <span class='ident'>observers</span>: <span class='ident'>Vec</span>::<span class='ident'>new</span>(),
@@ -777,7 +800,9 @@
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>((<span class='ident'>bytes_read</span>, <span class='ident'>peer_addr</span>)) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>.<span class='ident'>recv_from</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>.<span class='ident'>read_buf</span>)) {
             <span class='kw'>let</span> <span class='ident'>msg</span>: <span class='ident'>DiscoveryMsg</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='kw'>match</span> <span class='ident'>deserialise</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>read_buf</span>[..<span class='ident'>bytes_read</span>]) {
                 <span class='prelude-val'>Ok</span>(<span class='ident'>msg</span>) <span class='op'>=&gt;</span> <span class='ident'>msg</span>,
-                <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(()),
+                <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> {
+                    <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
+                }
             };
 
             <span class='kw'>match</span> <span class='ident'>msg</span> {
@@ -813,18 +838,17 @@
 
     <span class='kw'>fn</span> <span class='ident'>writable</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>event_loop</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>EventLoop</span><span class='op'>&lt;</span><span class='kw'>Self</span><span class='op'>&gt;</span>, <span class='ident'>token</span>: <span class='ident'>Token</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span> {
         <span class='kw'>if</span> <span class='ident'>token</span> <span class='op'>==</span> <span class='ident'>DISCOVERY</span> {
+            <span class='kw'>let</span> <span class='ident'>reply</span> <span class='op'>=</span> <span class='ident'>DiscoveryMsg</span>::<span class='ident'>Response</span> {
+                <span class='ident'>guid</span>: <span class='self'>self</span>.<span class='ident'>guid</span>,
+                <span class='ident'>content</span>: (<span class='self'>self</span>.<span class='ident'>reply_gen</span>)(),
+            };
+            <span class='kw'>let</span> <span class='ident'>serialised_reply</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>serialise</span>(<span class='kw-2'>&amp;</span><span class='ident'>reply</span>).<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span>
+                <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>new</span>(<span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>Other</span>, <span class='string'>&quot;Failed to serialise reply&quot;</span>)));
             <span class='kw'>while</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>peer_addr</span>) <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>reply_to</span>.<span class='ident'>pop_front</span>() {
-                <span class='kw'>let</span> <span class='ident'>discovery_response</span> <span class='op'>=</span> <span class='ident'>DiscoveryMsg</span>::<span class='ident'>Response</span> {
-                    <span class='ident'>guid</span>: <span class='self'>self</span>.<span class='ident'>guid</span>,
-                    <span class='ident'>content</span>: <span class='self'>self</span>.<span class='ident'>reply</span>.<span class='ident'>clone</span>(),
-                };
-                <span class='comment'>// We already tested the serialisation in the beginning so ok to unwrap_result!()</span>
-                <span class='comment'>// now</span>
-                <span class='kw'>let</span> <span class='ident'>serialised_response</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>serialise</span>(<span class='kw-2'>&amp;</span><span class='ident'>discovery_response</span>));
                 <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sent_bytes</span> <span class='op'>=</span> <span class='number'>0</span>;
-                <span class='kw'>while</span> <span class='ident'>sent_bytes</span> <span class='op'>!=</span> <span class='ident'>serialised_response</span>.<span class='ident'>len</span>() {
+                <span class='kw'>while</span> <span class='ident'>sent_bytes</span> <span class='op'>!=</span> <span class='ident'>serialised_reply</span>.<span class='ident'>len</span>() {
                     <span class='kw'>match</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>
-                                   .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='ident'>serialised_response</span>[<span class='ident'>sent_bytes</span>..], <span class='kw-2'>&amp;</span><span class='ident'>peer_addr</span>)) {
+                                   .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='ident'>serialised_reply</span>[<span class='ident'>sent_bytes</span>..], <span class='kw-2'>&amp;</span><span class='ident'>peer_addr</span>)) {
                         <span class='prelude-val'>Some</span>(<span class='ident'>bytes_tx</span>) <span class='op'>=&gt;</span> {
                             <span class='ident'>sent_bytes</span> <span class='op'>+=</span> <span class='ident'>bytes_tx</span>;
                         }
