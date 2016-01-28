@@ -430,7 +430,7 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
 mod tests {
     use super::*;
     use std::thread;
-    use std::sync::mpsc;
+    use std::sync::mpsc::{self, TryRecvError};
     use std::time::Duration;
 
     #[test]
@@ -449,6 +449,46 @@ mod tests {
         match rx1.try_recv() {
             Ok(0u32) => (),
             x => panic!("Unexpected result: {:?}", x),
+        };
+    }
+
+    #[test]
+    fn localhost_discovery_with_generator() {
+        let (tx0, _rx0) = mpsc::channel();
+        let reply_gen = || 0u32;
+        let sd0 = unwrap_result!(ServiceDiscovery::new_with_generator(45666, reply_gen));
+        assert!(sd0.register_seek_peer_observer(tx0));
+        assert!(sd0.set_listen_for_peers(true));
+
+        let (tx1, rx1) = mpsc::channel();
+        let sd1 = unwrap_result!(ServiceDiscovery::new(45666, 1u32));
+        assert!(sd1.register_seek_peer_observer(tx1));
+        assert!(sd1.seek_peers());
+
+        thread::sleep(Duration::from_millis(100));
+        match rx1.try_recv() {
+            Ok(0u32) => (),
+            x => panic!("Unexpected result: {:?}", x),
+        };
+    }
+
+    #[test]
+    fn localhost_discovery_stop_listening() {
+        let (tx0, _rx0) = mpsc::channel();
+        let sd0 = unwrap_result!(ServiceDiscovery::new(45666, 0u32));
+        assert!(sd0.register_seek_peer_observer(tx0));
+        assert!(sd0.set_listen_for_peers(true));
+
+        let (tx1, rx1) = mpsc::channel();
+        let sd1 = unwrap_result!(ServiceDiscovery::new(45666, 1u32));
+        assert!(sd1.register_seek_peer_observer(tx1));
+        assert!(sd0.set_listen_for_peers(false));
+        assert!(sd1.seek_peers());
+
+        thread::sleep(Duration::from_millis(100));
+        match rx1.try_recv() {
+            Ok(result) => panic!("Unexpected result: {:?}", result),
+            Err(error) => assert_eq!(error, TryRecvError::Empty),
         };
     }
 }
