@@ -11,14 +11,13 @@ version = "0.2.1"
 
 [dependencies]
 bytes = "~0.3.0"
-clippy = {version = "~0.0.37", optional = true}
+clippy = {version = "~0.0.44", optional = true}
 ip = "~1.1.0"
+libc = "0.2.7"
 log = "~0.3.5"
-maidsafe_utilities = "~0.1.5"
+maidsafe_utilities = "~0.2.1"
 mio = "~0.5.0"
-net2 = "~0.2.21"
-rand = "~0.3.13"
-rustc-serialize = "~0.3.16"
-void = "~0.0.5"
-libc = "0.2.6"
-
+net2 = "~0.2.22"
+rand = "~0.3.14"
+rustc-serialize = "~0.3.18"
+void = "~1.0.1"
