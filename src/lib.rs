@@ -260,11 +260,11 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
             Err(e) => {
                 match e.kind() {
                     io::ErrorKind::AddrInUse => {
-                        let addr = try!(SocketAddr::from_str("0.0.0.0:0").map_err(|_| {
+                        let mut addr = try!(SocketAddr::from_str("0.0.0.0:0").map_err(|_| {
                             io::Error::new(io::ErrorKind::Other, "failed to parse addr")
                         }));
                         try!(udp_socket.bind(&addr));
-                        let addr = try!(udp_socket.local_addr());
+                        addr = try!(udp_socket.local_addr());
                         addr.port()
                     }
                     _ => return Err(e),
@@ -312,11 +312,11 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
         //     self.read_buf.mut_bytes()
         // })) {
         if let Some((bytes_read, peer_addr)) = try!(self.socket.recv_from(&mut self.read_buf)) {
-            let msg: DiscoveryMsg<Reply> = match deserialise(&self.read_buf[..bytes_read]) {
-                Ok(msg) => msg,
-                Err(_) => {
-                    return Ok(());
-                }
+            let msg: DiscoveryMsg<Reply> = if let Ok(msg) =
+                                                  deserialise(&self.read_buf[..bytes_read]) {
+                msg
+            } else {
+                return Ok(());
             };
 
             match msg {
@@ -362,37 +362,33 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
             while let Some(peer_addr) = self.reply_to.pop_front() {
                 let mut sent_bytes = 0;
                 while sent_bytes != serialised_reply.len() {
-                    match try!(self.socket
-                                   .send_to(&serialised_reply[sent_bytes..], &peer_addr)) {
-                        Some(bytes_tx) => {
-                            sent_bytes += bytes_tx;
-                        }
-                        None => {
-                            try!(event_loop.reregister(&self.socket,
-                                                       DISCOVERY,
-                                                       EventSet::writable(),
-                                                       PollOpt::edge() | PollOpt::oneshot()));
-                            return Ok(());
-                        }
+                    if let Some(bytes_tx) = try!(self.socket
+                                                     .send_to(&serialised_reply[sent_bytes..],
+                                                              &peer_addr)) {
+                        sent_bytes += bytes_tx;
+                    } else {
+                        try!(event_loop.reregister(&self.socket,
+                                                   DISCOVERY,
+                                                   EventSet::writable(),
+                                                   PollOpt::edge() | PollOpt::oneshot()));
+                        return Ok(());
                     }
                 }
             }
         } else if token == SEEK_PEERS {
             let mut sent_bytes = 0;
             while sent_bytes != self.serialised_seek_peers_request.len() {
-                match try!(self.socket
-                               .send_to(&self.serialised_seek_peers_request[sent_bytes..],
-                                        &self.seek_peers_on)) {
-                    Some(bytes_tx) => {
-                        sent_bytes += bytes_tx;
-                    }
-                    None => {
-                        try!(event_loop.reregister(&self.socket,
-                                                   SEEK_PEERS,
-                                                   EventSet::writable(),
-                                                   PollOpt::edge() | PollOpt::oneshot()));
-                        return Ok(());
-                    }
+                if let Some(bytes_tx) =
+                       try!(self.socket
+                                .send_to(&self.serialised_seek_peers_request[sent_bytes..],
+                                         &self.seek_peers_on)) {
+                    sent_bytes += bytes_tx;
+                } else {
+                    try!(event_loop.reregister(&self.socket,
+                                               SEEK_PEERS,
+                                               EventSet::writable(),
+                                               PollOpt::edge() | PollOpt::oneshot()));
+                    return Ok(());
                 }
             }
         }
@@ -446,20 +442,20 @@ mod tests {
         let mut rng = rand::thread_rng();
         let range = rand::distributions::Range::new(1024, 65535);
         let mut port: u16 = range.ind_sample(&mut rng);
-        let mut sd0 = ServiceDiscovery::new(port, 0u32);
+        let mut sd0_result = ServiceDiscovery::new(port, 0u32);
 
-        if sd0.is_err() {
+        if sd0_result.is_err() {
             for _ in 0..10 {
                 port = range.ind_sample(&mut rng);
                 if let Ok(sd) = ServiceDiscovery::new(port, 0u32) {
-                    sd0 = Ok(sd);
+                    sd0_result = Ok(sd);
                     break;
                 }
             }
         }
 
-        assert!(sd0.is_ok());
-        let sd0 = unwrap_result!(sd0);
+        assert!(sd0_result.is_ok());
+        let sd0 = unwrap_result!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
@@ -482,20 +478,20 @@ mod tests {
         let mut rng = rand::thread_rng();
         let range = rand::distributions::Range::new(1024, 65535);
         let mut port: u16 = range.ind_sample(&mut rng);
-        let mut sd0 = ServiceDiscovery::new_with_generator(port, || 0u32);
+        let mut sd0_result = ServiceDiscovery::new_with_generator(port, || 0u32);
 
-        if sd0.is_err() {
+        if sd0_result.is_err() {
             for _ in 0..10 {
                 port = range.ind_sample(&mut rng);
                 if let Ok(sd) = ServiceDiscovery::new_with_generator(port, || 0u32) {
-                    sd0 = Ok(sd);
+                    sd0_result = Ok(sd);
                     break;
                 }
             }
         }
 
-        assert!(sd0.is_ok());
-        let sd0 = unwrap_result!(sd0);
+        assert!(sd0_result.is_ok());
+        let sd0 = unwrap_result!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
@@ -518,20 +514,20 @@ mod tests {
         let mut rng = rand::thread_rng();
         let range = rand::distributions::Range::new(1024, 65535);
         let mut port: u16 = range.ind_sample(&mut rng);
-        let mut sd0 = ServiceDiscovery::new(port, 0u32);
+        let mut sd0_result = ServiceDiscovery::new(port, 0u32);
 
-        if sd0.is_err() {
+        if sd0_result.is_err() {
             for _ in 0..10 {
                 port = range.ind_sample(&mut rng);
                 if let Ok(sd) = ServiceDiscovery::new(port, 0u32) {
-                    sd0 = Ok(sd);
+                    sd0_result = Ok(sd);
                     break;
                 }
             }
         }
 
-        assert!(sd0.is_ok());
-        let sd0 = unwrap_result!(sd0);
+        assert!(sd0_result.is_ok());
+        let sd0 = unwrap_result!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
