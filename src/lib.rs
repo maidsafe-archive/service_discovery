@@ -46,12 +46,10 @@
 #[macro_use]
 extern crate log;
 extern crate mio;
-// extern crate bytes;
 extern crate rustc_serialize;
 #[macro_use]
 extern crate maidsafe_utilities;
 extern crate void;
-// extern crate libc;
 extern crate rand;
 
 use std::sync::mpsc;
@@ -378,8 +376,7 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
         } else if token == SEEK_PEERS {
             let mut sent_bytes = 0;
             while sent_bytes != self.serialised_seek_peers_request.len() {
-                if let Some(bytes_tx) =
-                       try!(self.socket
+                if let Some(bytes_tx) = try!(self.socket
                                 .send_to(&self.serialised_seek_peers_request[sent_bytes..],
                                          &self.seek_peers_on)) {
                     sent_bytes += bytes_tx;
