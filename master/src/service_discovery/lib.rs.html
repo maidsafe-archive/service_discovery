@@ -585,12 +585,6 @@
 <span id="542">542</span>
 <span id="543">543</span>
 <span id="544">544</span>
-<span id="545">545</span>
-<span id="546">546</span>
-<span id="547">547</span>
-<span id="548">548</span>
-<span id="549">549</span>
-<span id="550">550</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 MaidSafe.net limited.</span>
 <span class='comment'>//</span>
@@ -635,16 +629,15 @@
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>cfg_attr</span>(<span class='ident'>feature</span><span class='op'>=</span><span class='string'>&quot;clippy&quot;</span>, <span class='ident'>feature</span>(<span class='ident'>plugin</span>))]</span>
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>cfg_attr</span>(<span class='ident'>feature</span><span class='op'>=</span><span class='string'>&quot;clippy&quot;</span>, <span class='ident'>plugin</span>(<span class='ident'>clippy</span>))]</span>
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>cfg_attr</span>(<span class='ident'>feature</span><span class='op'>=</span><span class='string'>&quot;clippy&quot;</span>, <span class='ident'>deny</span>(<span class='ident'>clippy</span>, <span class='ident'>clippy_pedantic</span>))]</span>
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>cfg_attr</span>(<span class='ident'>feature</span><span class='op'>=</span><span class='string'>&quot;clippy&quot;</span>, <span class='ident'>allow</span>(<span class='ident'>use_debug</span>))]</span>
 
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>log</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>mio</span>;
-<span class='comment'>// extern crate bytes;</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>maidsafe_utilities</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>void</span>;
-<span class='comment'>// extern crate libc;</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rand</span>;
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>mpsc</span>;
@@ -853,11 +846,11 @@
             <span class='prelude-val'>Err</span>(<span class='ident'>e</span>) <span class='op'>=&gt;</span> {
                 <span class='kw'>match</span> <span class='ident'>e</span>.<span class='ident'>kind</span>() {
                     <span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>AddrInUse</span> <span class='op'>=&gt;</span> {
-                        <span class='kw'>let</span> <span class='ident'>addr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>SocketAddr</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;0.0.0.0:0&quot;</span>).<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> {
+                        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>addr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>SocketAddr</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;0.0.0.0:0&quot;</span>).<span class='ident'>map_err</span>(<span class='op'>|</span>_<span class='op'>|</span> {
                             <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>new</span>(<span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>Other</span>, <span class='string'>&quot;failed to parse addr&quot;</span>)
                         }));
                         <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>udp_socket</span>.<span class='ident'>bind</span>(<span class='kw-2'>&amp;</span><span class='ident'>addr</span>));
-                        <span class='kw'>let</span> <span class='ident'>addr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>udp_socket</span>.<span class='ident'>local_addr</span>());
+                        <span class='ident'>addr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>udp_socket</span>.<span class='ident'>local_addr</span>());
                         <span class='ident'>addr</span>.<span class='ident'>port</span>()
                     }
                     _ <span class='op'>=&gt;</span> <span class='kw'>return</span> <span class='prelude-val'>Err</span>(<span class='ident'>e</span>),
@@ -905,11 +898,11 @@
         <span class='comment'>//     self.read_buf.mut_bytes()</span>
         <span class='comment'>// })) {</span>
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>((<span class='ident'>bytes_read</span>, <span class='ident'>peer_addr</span>)) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>.<span class='ident'>recv_from</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>.<span class='ident'>read_buf</span>)) {
-            <span class='kw'>let</span> <span class='ident'>msg</span>: <span class='ident'>DiscoveryMsg</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='kw'>match</span> <span class='ident'>deserialise</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>read_buf</span>[..<span class='ident'>bytes_read</span>]) {
-                <span class='prelude-val'>Ok</span>(<span class='ident'>msg</span>) <span class='op'>=&gt;</span> <span class='ident'>msg</span>,
-                <span class='prelude-val'>Err</span>(_) <span class='op'>=&gt;</span> {
-                    <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
-                }
+            <span class='kw'>let</span> <span class='ident'>msg</span>: <span class='ident'>DiscoveryMsg</span><span class='op'>&lt;</span><span class='ident'>Reply</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>msg</span>) <span class='op'>=</span>
+                                                  <span class='ident'>deserialise</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>read_buf</span>[..<span class='ident'>bytes_read</span>]) {
+                <span class='ident'>msg</span>
+            } <span class='kw'>else</span> {
+                <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
             };
 
             <span class='kw'>match</span> <span class='ident'>msg</span> {
@@ -955,37 +948,32 @@
             <span class='kw'>while</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>peer_addr</span>) <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>reply_to</span>.<span class='ident'>pop_front</span>() {
                 <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sent_bytes</span> <span class='op'>=</span> <span class='number'>0</span>;
                 <span class='kw'>while</span> <span class='ident'>sent_bytes</span> <span class='op'>!=</span> <span class='ident'>serialised_reply</span>.<span class='ident'>len</span>() {
-                    <span class='kw'>match</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>
-                                   .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='ident'>serialised_reply</span>[<span class='ident'>sent_bytes</span>..], <span class='kw-2'>&amp;</span><span class='ident'>peer_addr</span>)) {
-                        <span class='prelude-val'>Some</span>(<span class='ident'>bytes_tx</span>) <span class='op'>=&gt;</span> {
-                            <span class='ident'>sent_bytes</span> <span class='op'>+=</span> <span class='ident'>bytes_tx</span>;
-                        }
-                        <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> {
-                            <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>event_loop</span>.<span class='ident'>reregister</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>socket</span>,
-                                                       <span class='ident'>DISCOVERY</span>,
-                                                       <span class='ident'>EventSet</span>::<span class='ident'>writable</span>(),
-                                                       <span class='ident'>PollOpt</span>::<span class='ident'>edge</span>() <span class='op'>|</span> <span class='ident'>PollOpt</span>::<span class='ident'>oneshot</span>()));
-                            <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
-                        }
+                    <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>bytes_tx</span>) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>
+                                                     .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='ident'>serialised_reply</span>[<span class='ident'>sent_bytes</span>..],
+                                                              <span class='kw-2'>&amp;</span><span class='ident'>peer_addr</span>)) {
+                        <span class='ident'>sent_bytes</span> <span class='op'>+=</span> <span class='ident'>bytes_tx</span>;
+                    } <span class='kw'>else</span> {
+                        <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>event_loop</span>.<span class='ident'>reregister</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>socket</span>,
+                                                   <span class='ident'>DISCOVERY</span>,
+                                                   <span class='ident'>EventSet</span>::<span class='ident'>writable</span>(),
+                                                   <span class='ident'>PollOpt</span>::<span class='ident'>edge</span>() <span class='op'>|</span> <span class='ident'>PollOpt</span>::<span class='ident'>oneshot</span>()));
+                        <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
                     }
                 }
             }
         } <span class='kw'>else</span> <span class='kw'>if</span> <span class='ident'>token</span> <span class='op'>==</span> <span class='ident'>SEEK_PEERS</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sent_bytes</span> <span class='op'>=</span> <span class='number'>0</span>;
             <span class='kw'>while</span> <span class='ident'>sent_bytes</span> <span class='op'>!=</span> <span class='self'>self</span>.<span class='ident'>serialised_seek_peers_request</span>.<span class='ident'>len</span>() {
-                <span class='kw'>match</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>
-                               .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>serialised_seek_peers_request</span>[<span class='ident'>sent_bytes</span>..],
-                                        <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>seek_peers_on</span>)) {
-                    <span class='prelude-val'>Some</span>(<span class='ident'>bytes_tx</span>) <span class='op'>=&gt;</span> {
-                        <span class='ident'>sent_bytes</span> <span class='op'>+=</span> <span class='ident'>bytes_tx</span>;
-                    }
-                    <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> {
-                        <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>event_loop</span>.<span class='ident'>reregister</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>socket</span>,
-                                                   <span class='ident'>SEEK_PEERS</span>,
-                                                   <span class='ident'>EventSet</span>::<span class='ident'>writable</span>(),
-                                                   <span class='ident'>PollOpt</span>::<span class='ident'>edge</span>() <span class='op'>|</span> <span class='ident'>PollOpt</span>::<span class='ident'>oneshot</span>()));
-                        <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
-                    }
+                <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>bytes_tx</span>) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='self'>self</span>.<span class='ident'>socket</span>
+                                .<span class='ident'>send_to</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>serialised_seek_peers_request</span>[<span class='ident'>sent_bytes</span>..],
+                                         <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>seek_peers_on</span>)) {
+                    <span class='ident'>sent_bytes</span> <span class='op'>+=</span> <span class='ident'>bytes_tx</span>;
+                } <span class='kw'>else</span> {
+                    <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>event_loop</span>.<span class='ident'>reregister</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>socket</span>,
+                                               <span class='ident'>SEEK_PEERS</span>,
+                                               <span class='ident'>EventSet</span>::<span class='ident'>writable</span>(),
+                                               <span class='ident'>PollOpt</span>::<span class='ident'>edge</span>() <span class='op'>|</span> <span class='ident'>PollOpt</span>::<span class='ident'>oneshot</span>()));
+                    <span class='kw'>return</span> <span class='prelude-val'>Ok</span>(());
                 }
             }
         }
@@ -1039,20 +1027,20 @@
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>rng</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>thread_rng</span>();
         <span class='kw'>let</span> <span class='ident'>range</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>distributions</span>::<span class='ident'>Range</span>::<span class='ident'>new</span>(<span class='number'>1024</span>, <span class='number'>65535</span>);
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>port</span>: <span class='ident'>u16</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>);
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>);
 
-        <span class='kw'>if</span> <span class='ident'>sd0</span>.<span class='ident'>is_err</span>() {
+        <span class='kw'>if</span> <span class='ident'>sd0_result</span>.<span class='ident'>is_err</span>() {
             <span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='number'>10</span> {
                 <span class='ident'>port</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>) <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>) {
-                    <span class='ident'>sd0</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
+                    <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
                     <span class='kw'>break</span>;
                 }
             }
         }
 
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>is_ok</span>());
-        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0</span>);
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>.<span class='ident'>is_ok</span>());
+        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>);
 
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>register_seek_peer_observer</span>(<span class='ident'>tx0</span>));
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>set_listen_for_peers</span>(<span class='boolval'>true</span>));
@@ -1075,20 +1063,20 @@
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>rng</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>thread_rng</span>();
         <span class='kw'>let</span> <span class='ident'>range</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>distributions</span>::<span class='ident'>Range</span>::<span class='ident'>new</span>(<span class='number'>1024</span>, <span class='number'>65535</span>);
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>port</span>: <span class='ident'>u16</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new_with_generator</span>(<span class='ident'>port</span>, <span class='op'>||</span> <span class='number'>0u32</span>);
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new_with_generator</span>(<span class='ident'>port</span>, <span class='op'>||</span> <span class='number'>0u32</span>);
 
-        <span class='kw'>if</span> <span class='ident'>sd0</span>.<span class='ident'>is_err</span>() {
+        <span class='kw'>if</span> <span class='ident'>sd0_result</span>.<span class='ident'>is_err</span>() {
             <span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='number'>10</span> {
                 <span class='ident'>port</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>) <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new_with_generator</span>(<span class='ident'>port</span>, <span class='op'>||</span> <span class='number'>0u32</span>) {
-                    <span class='ident'>sd0</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
+                    <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
                     <span class='kw'>break</span>;
                 }
             }
         }
 
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>is_ok</span>());
-        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0</span>);
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>.<span class='ident'>is_ok</span>());
+        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>);
 
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>register_seek_peer_observer</span>(<span class='ident'>tx0</span>));
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>set_listen_for_peers</span>(<span class='boolval'>true</span>));
@@ -1111,20 +1099,20 @@
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>rng</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>thread_rng</span>();
         <span class='kw'>let</span> <span class='ident'>range</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>distributions</span>::<span class='ident'>Range</span>::<span class='ident'>new</span>(<span class='number'>1024</span>, <span class='number'>65535</span>);
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>port</span>: <span class='ident'>u16</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>);
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>);
 
-        <span class='kw'>if</span> <span class='ident'>sd0</span>.<span class='ident'>is_err</span>() {
+        <span class='kw'>if</span> <span class='ident'>sd0_result</span>.<span class='ident'>is_err</span>() {
             <span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='number'>10</span> {
                 <span class='ident'>port</span> <span class='op'>=</span> <span class='ident'>range</span>.<span class='ident'>ind_sample</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>rng</span>);
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>) <span class='op'>=</span> <span class='ident'>ServiceDiscovery</span>::<span class='ident'>new</span>(<span class='ident'>port</span>, <span class='number'>0u32</span>) {
-                    <span class='ident'>sd0</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
+                    <span class='ident'>sd0_result</span> <span class='op'>=</span> <span class='prelude-val'>Ok</span>(<span class='ident'>sd</span>);
                     <span class='kw'>break</span>;
                 }
             }
         }
 
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>is_ok</span>());
-        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0</span>);
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>.<span class='ident'>is_ok</span>());
+        <span class='kw'>let</span> <span class='ident'>sd0</span> <span class='op'>=</span> <span class='macro'>unwrap_result</span><span class='macro'>!</span>(<span class='ident'>sd0_result</span>);
 
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>register_seek_peer_observer</span>(<span class='ident'>tx0</span>));
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sd0</span>.<span class='ident'>set_listen_for_peers</span>(<span class='boolval'>true</span>));
