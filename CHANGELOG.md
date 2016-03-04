@@ -1,5 +1,10 @@
 # service_discovery - Change Log
 
+## [0.3.0]
+- Improved tests
+- Updated dependencies
+- Fixed Clippy warnings
+
 ## [0.2.1]
 - Bug Fix on Windows - Fixes Issue 12
 
