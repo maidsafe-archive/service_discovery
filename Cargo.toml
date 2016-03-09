@@ -17,3 +17,5 @@ mio = "~0.5.0"
 rand = "~0.3.14"
 rustc-serialize = "~0.3.18"
 void = "~1.0.1"
+unwrap = "~1.0.0"
+
