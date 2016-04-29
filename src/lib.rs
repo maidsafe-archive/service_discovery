@@ -49,6 +49,8 @@ extern crate mio;
 extern crate rustc_serialize;
 #[macro_use]
 extern crate maidsafe_utilities;
+#[macro_use]
+extern crate unwrap;
 extern crate void;
 extern crate rand;
 
@@ -248,8 +250,8 @@ impl<Reply, ReplyGen> ServiceDiscoveryImpl<Reply, ReplyGen>
                                "Serialisation Error. TODO: Improve this")
             }));
 
-        let bind_addr = unwrap_option!(try!(("0.0.0.0", port).to_socket_addrs()).next(),
-                                       "Failed to parse socket address");
+        let bind_addr = unwrap!(try!(("0.0.0.0", port).to_socket_addrs()).next(),
+                                "Failed to parse socket address");
 
         let udp_socket = try!(UdpSocket::v4());
         // try!(enable_so_reuseport(&udp_socket));
@@ -452,13 +454,13 @@ mod tests {
         }
 
         assert!(sd0_result.is_ok());
-        let sd0 = unwrap_result!(sd0_result);
+        let sd0 = unwrap!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let sd1 = unwrap_result!(ServiceDiscovery::new(port, 1u32));
+        let sd1 = unwrap!(ServiceDiscovery::new(port, 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd1.seek_peers());
 
@@ -488,13 +490,13 @@ mod tests {
         }
 
         assert!(sd0_result.is_ok());
-        let sd0 = unwrap_result!(sd0_result);
+        let sd0 = unwrap!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let sd1 = unwrap_result!(ServiceDiscovery::new_with_generator(port, || 1u32));
+        let sd1 = unwrap!(ServiceDiscovery::new_with_generator(port, || 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd1.seek_peers());
 
@@ -524,13 +526,13 @@ mod tests {
         }
 
         assert!(sd0_result.is_ok());
-        let sd0 = unwrap_result!(sd0_result);
+        let sd0 = unwrap!(sd0_result);
 
         assert!(sd0.register_seek_peer_observer(tx0));
         assert!(sd0.set_listen_for_peers(true));
 
         let (tx1, rx1) = mpsc::channel();
-        let sd1 = unwrap_result!(ServiceDiscovery::new(port, 1u32));
+        let sd1 = unwrap!(ServiceDiscovery::new(port, 1u32));
         assert!(sd1.register_seek_peer_observer(tx1));
         assert!(sd0.set_listen_for_peers(false));
         assert!(sd1.seek_peers());
