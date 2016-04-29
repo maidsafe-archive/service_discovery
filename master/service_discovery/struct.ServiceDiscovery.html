@@ -26,7 +26,7 @@
     
 
     <nav class="sidebar">
-        <a href='../service_discovery/index.html'><img src='https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png' alt='' width='100'></a>
+        <a href='../service_discovery/index.html'><img src='https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png' alt='logo' width='100'></a>
         <p class='location'><a href='index.html'>service_discovery</a></p><script>window.sidebarCurrent = {name: 'ServiceDiscovery', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
     </nav>
 
@@ -46,7 +46,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-23' class='srclink' href='../src/service_discovery/lib.rs.html#79-84' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-23' class='srclink' href='../src/service_discovery/src/lib.rs.html#79-84' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct ServiceDiscovery&lt;Reply: 'static + <a class='trait' href='../rustc_serialize/serialize/trait.Encodable.html' title='rustc_serialize::serialize::Encodable'>Encodable</a> + <a class='trait' href='../rustc_serialize/serialize/trait.Decodable.html' title='rustc_serialize::serialize::Decodable'>Decodable</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a>&gt; {
     // some fields omitted
 }</pre><div class='docblock'><p>ServiceDiscovery is a RAII API for the purposes of discovering peers on the local network. To
@@ -113,7 +113,7 @@ request.</p>
 
                 <p>
                     Search functions by type signature (e.g.
-                    <code>vec -> usize</code>)
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
                 </p>
             </div>
         </div>

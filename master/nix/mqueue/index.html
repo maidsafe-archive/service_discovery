@@ -46,7 +46,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-1749' class='srclink' href='../../src/nix/mqueue.rs.html#1-161' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-2008' class='srclink' href='../../src/nix/mqueue.rs.html#1-145' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'><p>Posix Message Queue functions</p>
 
 <p><a href="http://man7.org/linux/man-pages/man7/mq_overview.7.html">Further reading and details on the C API</a></p>
@@ -181,7 +181,6 @@
                              <p>Convenience function.
 Removes O_NONBLOCK attribute for a given message queue descriptor
 Returns the old attributes</p>
-
                         </td>
                     </tr>
                 
@@ -200,7 +199,6 @@ Returns the old attributes</p>
                              <p>Convenience function.
 Sets the O_NONBLOCK attribute for a given message queue descriptor
 Returns the old attributes</p>
-
                         </td>
                     </tr>
                 
@@ -211,7 +209,6 @@ Returns the old attributes</p>
                              <p>Set the attributes of the message queue. Only O_NONBLOCK can be set, everything else will be ignored
 Returns the old attributes
 It is recommend to use the mq_set_nonblock() and mq_remove_nonblock() convenience functions as they are easier to use</p>
-
                         </td>
                     </tr>
                 
@@ -274,7 +271,7 @@ It is recommend to use the mq_set_nonblock() and mq_remove_nonblock() convenienc
 
                 <p>
                     Search functions by type signature (e.g.
-                    <code>vec -> usize</code>)
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
                 </p>
             </div>
         </div>
