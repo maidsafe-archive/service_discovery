@@ -1,9 +1,9 @@
 [package]
 authors = ["MaidSafe Developers <dev@maidsafe.net>"]
 description = "Discover other instances of your application on the local network."
-documentation = "http://maidsafe.net/service_discovery/latest"
+documentation = "http://docs.maidsafe.net/service_discovery/latest"
 homepage = "http://maidsafe.net"
-license = "GPL-3.0"
+license = "GPL-3.0/MaidSafe.net Commercial License 1.0"
 name = "service_discovery"
 readme = "README.md"
 repository = "https://github.com/maidsafe/service_discovery"
